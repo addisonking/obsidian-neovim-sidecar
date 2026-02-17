@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-neovim-sidecar",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "made as a simpler and more robust replacement to edit-in-neovim",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
