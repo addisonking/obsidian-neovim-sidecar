@@ -17,7 +17,7 @@ click the ribbon icon or run the command "toggle neovim session" to start/stop.
 run this in your vault directory:
 
 ```sh
-mkdir -p .obsidian/plugins/obsidian-neovim-sidecar && gh release download -R addisonking/obsidian-neovim-sidecar -D .obsidian/plugins/obsidian-neovim-sidecar -p '*'
+mkdir -p .obsidian/plugins/obsidian-neovim-sidecar && gh release download -R addisonking/obsidian-neovim-sidecar -D .obsidian/plugins/obsidian-neovim-sidecar -p '*' --clobber
 ```
 
 then enable the plugin in obsidian settings.
@@ -25,4 +25,3 @@ then enable the plugin in obsidian settings.
 ## watch
 
 https://github.com/user-attachments/assets/6f785211-3b38-4811-b3b7-bd743446d730
-
