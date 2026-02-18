@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { Notice, Plugin, TFile } from 'obsidian';
 import { exec, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
@@ -124,7 +124,6 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 			this.currentFile = filePath;
 			this.sessionActive = true;
-			this.setReadOnlyMode(true);
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 		});
@@ -163,17 +162,6 @@ export default class NeovimSidecarPlugin extends Plugin {
 				return 'iTerm';
 			default:
 				return 'Alacritty';
-		}
-	}
-
-	private setReadOnlyMode(enabled: boolean) {
-		const leaf = this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf;
-		if (leaf) {
-			const viewState = leaf.getViewState();
-			if (viewState.state) {
-				viewState.state.mode = enabled ? 'preview' : 'source';
-				void leaf.setViewState(viewState);
-			}
 		}
 	}
 
@@ -235,7 +223,6 @@ export default class NeovimSidecarPlugin extends Plugin {
 		}
 		this.sessionActive = false;
 		this.currentFile = null;
-		this.setReadOnlyMode(false);
 	}
 
 	private getAbsolutePath(file: TFile): string | null {
