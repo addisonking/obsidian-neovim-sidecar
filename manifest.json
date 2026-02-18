@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-neovim-sidecar",
 	"name": "Obsidian Neovim Sidecar",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"minAppVersion": "1.11.0",
 	"description": "a simple replacement for edit-in-neovim, tailored for alacritty and macos",
 	"author": "Addison King",
