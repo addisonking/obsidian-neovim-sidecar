@@ -7,8 +7,8 @@ export interface NeovimSidecarSettings {
 }
 
 export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
-	terminal: '',
-	nvimPath: 'nvim',
+	terminal: 'alacritty',
+	nvimPath: '/opt/homebrew/bin/nvim',
 };
 
 export class NeovimSidecarSettingTab extends PluginSettingTab {
