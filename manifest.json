@@ -3,7 +3,7 @@
 	"name": "Obsidian Neovim Sidecar",
 	"version": "1.0.0",
 	"minAppVersion": "1.11.0",
-	"description": "made as a simpler and more robust replacement to edit-in-neovim",
+	"description": "a simple replacement for edit-in-neovim, tailored for alacritty and macos",
 	"author": "Addison King",
 	"authorUrl": "https://addisonking.com",
 	"isDesktopOnly": true
