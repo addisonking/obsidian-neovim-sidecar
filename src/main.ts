@@ -109,11 +109,21 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const terminal = this.settings.terminal.toLowerCase().trim();
 		const escapedPath = filePath.replace(/'/g, "'\\''");
 
+		// Get vault directory for working directory (needed for obsidian.nvim)
+		const vaultPath = this.getVaultPath();
+		const escapedVaultPath = vaultPath ? vaultPath.replace(/'/g, "'\\''") : '';
+
 		if (this.isSessionRunning()) {
 			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: SHELL });
 		}
 
-		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${nvim} -c 'set wrap linebreak' '${escapedPath}'"`;
+		// Use interactive login shell (-li) to source shell config (.zshrc and .zprofile)
+		// and set working directory to vault
+		// This ensures plugins like obsidian.nvim, copilot.nvim, and obsidian-bridge work properly
+		// -l: login shell (sources .zprofile)
+		// -i: interactive shell (sources .zshrc where env vars like OBSIDIAN_REST_API_KEY are set)
+		const cdCmd = vaultPath ? `cd '${escapedVaultPath}' && ` : '';
+		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${cdCmd}${nvim} -c \\\"set wrap linebreak\\\" \\\"${escapedPath.replace(/"/g, '\\\\\\"')}\\\"'"`;
 
 		exec(tmuxCmd, { shell: SHELL }, (error) => {
 			if (error) {
@@ -230,6 +240,14 @@ export default class NeovimSidecarPlugin extends Plugin {
 		if (adapter.getBasePath) {
 			const basePath = adapter.getBasePath();
 			return `${basePath}/${file.path}`;
+		}
+		return null;
+	}
+
+	private getVaultPath(): string | null {
+		const adapter = this.app.vault.adapter as { getBasePath?: () => string };
+		if (adapter.getBasePath) {
+			return adapter.getBasePath();
 		}
 		return null;
 	}
