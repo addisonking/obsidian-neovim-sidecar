@@ -167,17 +167,13 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private setReadOnlyMode(enabled: boolean) {
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (view) {
-			const state = view.getState();
-			if (enabled) {
-				// switch to reading/preview mode
-				state.mode = 'preview';
-			} else {
-				// switch back to editing mode
-				state.mode = 'source';
+		const leaf = this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf;
+		if (leaf) {
+			const viewState = leaf.getViewState();
+			if (viewState.state) {
+				viewState.state.mode = enabled ? 'preview' : 'source';
+				leaf.setViewState(viewState);
 			}
-			view.setState(state, { history: false });
 		}
 	}
 
