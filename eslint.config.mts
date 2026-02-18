@@ -22,6 +22,16 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		plugins: {
+			obsidianmd
+		},
+		rules: {
+			"obsidianmd/ui/sentence-case": ["error", {
+				brands: ["Alacritty", "Neovim"]
+			}]
+		}
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",

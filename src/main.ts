@@ -1,5 +1,6 @@
 import {Notice, Plugin, TFile} from 'obsidian';
 import {exec, execSync} from 'child_process';
+import {existsSync} from 'fs';
 import {DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab} from "./settings";
 
 const SESSION_NAME = 'obsidian-neovim-sidecar';
@@ -112,7 +113,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		
 		exec(tmuxCmd, {shell: SHELL}, (error) => {
 			if (error) {
-				console.error('[neovim-sidecar] Failed to start tmux session:', error);
+				console.debug('[neovim-sidecar] Failed to start tmux session:', error);
 				new Notice('Failed to start Neovim session');
 				return;
 			}
@@ -129,7 +130,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
 		const cmd = this.getTerminalCommand(terminal, attachCmd);
 
-		console.log('[neovim-sidecar] Opening terminal:', cmd);
+		console.debug('[neovim-sidecar] Opening terminal:', cmd);
 		exec(cmd);
 	}
 
@@ -161,10 +162,10 @@ export default class NeovimSidecarPlugin extends Plugin {
 		
 		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":e ${escapedPath}" Enter`, {shell: SHELL}, (error) => {
 			if (error) {
-				console.error('[neovim-sidecar] Failed to switch file:', error);
+				console.debug('[neovim-sidecar] Failed to switch file:', error);
 			} else {
 				this.currentFile = filePath;
-				console.log('[neovim-sidecar] Switched to:', filePath);
+				console.debug('[neovim-sidecar] Switched to:', filePath);
 			}
 		});
 	}
@@ -190,16 +191,15 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private getAbsolutePath(file: TFile): string | null {
-		const adapter = this.app.vault.adapter;
-		if ('getBasePath' in adapter && typeof adapter.getBasePath === 'function') {
-			const basePath = adapter.getBasePath() as string;
+		const adapter = this.app.vault.adapter as { getBasePath?: () => string };
+		if (adapter.getBasePath) {
+			const basePath = adapter.getBasePath();
 			return `${basePath}/${file.path}`;
 		}
 		return null;
 	}
 
 	private findNvimPath(): string {
-		const {existsSync} = require('fs');
 		const paths = [
 			'/opt/homebrew/bin/nvim',
 			'/usr/local/bin/nvim',
@@ -212,7 +212,6 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private findTmuxPath(): string {
-		const {existsSync} = require('fs');
 		const paths = [
 			'/opt/homebrew/bin/tmux',
 			'/usr/local/bin/tmux',

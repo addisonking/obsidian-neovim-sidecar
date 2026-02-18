@@ -23,13 +23,11 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Obsidian Neovim Sidecar Settings'});
-
 		new Setting(containerEl)
 			.setName('Terminal')
-			.setDesc('Terminal to use (currently only alacritty is supported)')
+			.setDesc('Only Alacritty is currently supported')
 			.addText(text => text
-				.setPlaceholder('alacritty')
+				.setPlaceholder('Alacritty')
 				.setValue(this.plugin.settings.terminal)
 				.onChange(async (value) => {
 					this.plugin.settings.terminal = value;
@@ -38,9 +36,9 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Neovim path')
-			.setDesc('Path to nvim executable (default: nvim)')
+			.setDesc('Path to nvim executable')
 			.addText(text => text
-				.setPlaceholder('nvim')
+				.setPlaceholder('/usr/local/bin/nvim')
 				.setValue(this.plugin.settings.nvimPath)
 				.onChange(async (value) => {
 					this.plugin.settings.nvimPath = value || 'nvim';
