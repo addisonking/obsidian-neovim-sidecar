@@ -14,6 +14,10 @@ click the ribbon icon or run the command "toggle neovim session" to start/stop.
 
 ## install
 
-copy `main.js`, `manifest.json`, and `styles.css` to `.obsidian/plugins/obsidian-neovim-sidecar/` in your vault.
-or
-clone repo to vault plugins directory and run `bun run build`.
+run this in your vault directory:
+
+```sh
+mkdir -p .obsidian/plugins/obsidian-neovim-sidecar && cd .obsidian/plugins/obsidian-neovim-sidecar && curl -LO https://github.com/addisonking/obsidian-neovim-sidecar/releases/latest/download/main.js && curl -LO https://github.com/addisonking/obsidian-neovim-sidecar/releases/latest/download/manifest.json && curl -LO https://github.com/addisonking/obsidian-neovim-sidecar/releases/latest/download/styles.css
+```
+
+then enable the plugin in obsidian settings.
