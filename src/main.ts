@@ -172,7 +172,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			const viewState = leaf.getViewState();
 			if (viewState.state) {
 				viewState.state.mode = enabled ? 'preview' : 'source';
-				leaf.setViewState(viewState);
+				void leaf.setViewState(viewState);
 			}
 		}
 	}
