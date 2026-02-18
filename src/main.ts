@@ -123,7 +123,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 		// -l: login shell (sources .zprofile)
 		// -i: interactive shell (sources .zshrc where env vars like OBSIDIAN_REST_API_KEY are set)
 		const cdCmd = vaultPath ? `cd '${escapedVaultPath}' && ` : '';
-		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${cdCmd}${nvim} -c \\\"set wrap linebreak\\\" \\\"${escapedPath.replace(/"/g, '\\\\\\"')}\\\"'"`;
+		const innerCmd = `${cdCmd}${nvim} -c "set wrap linebreak" '${escapedPath}'`;
+		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${innerCmd}'"`;
 
 		exec(tmuxCmd, { shell: SHELL }, (error) => {
 			if (error) {
