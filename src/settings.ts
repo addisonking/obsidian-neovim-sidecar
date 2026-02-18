@@ -1,35 +1,49 @@
 import {App, PluginSettingTab, Setting} from "obsidian";
-import MyPlugin from "./main";
+import NeovimSidecarPlugin from "./main";
 
-export interface MyPluginSettings {
-	mySetting: string;
+export interface NeovimSidecarSettings {
+	terminal: string;
+	nvimPath: string;
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
+	terminal: '',
+	nvimPath: 'nvim'
 }
 
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class NeovimSidecarSettingTab extends PluginSettingTab {
+	plugin: NeovimSidecarPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: NeovimSidecarPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
 		const {containerEl} = this;
-
 		containerEl.empty();
 
+		containerEl.createEl('h2', {text: 'Obsidian Neovim Sidecar Settings'});
+
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
+			.setName('Terminal')
+			.setDesc('Terminal to use (currently only alacritty is supported)')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('alacritty')
+				.setValue(this.plugin.settings.terminal)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.terminal = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Neovim path')
+			.setDesc('Path to nvim executable (default: nvim)')
+			.addText(text => text
+				.setPlaceholder('nvim')
+				.setValue(this.plugin.settings.nvimPath)
+				.onChange(async (value) => {
+					this.plugin.settings.nvimPath = value || 'nvim';
 					await this.plugin.saveSettings();
 				}));
 	}

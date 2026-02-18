@@ -1,99 +1,226 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {Notice, Plugin, TFile} from 'obsidian';
+import {exec, execSync} from 'child_process';
+import {DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab} from "./settings";
 
-// Remember to rename these classes and interfaces!
+const SESSION_NAME = 'obsidian-neovim-sidecar';
+const SHELL = '/bin/zsh';
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class NeovimSidecarPlugin extends Plugin {
+	settings: NeovimSidecarSettings;
+	private currentFile: string | null = null;
+	private sessionActive = false;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.addRibbonIcon('file-code', 'Open in Neovim', () => {
+			this.toggleSession();
 		});
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		window.addEventListener('beforeunload', this.handleBeforeUnload);
 
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
+			id: 'toggle-neovim-session',
+			name: 'Toggle Neovim session',
 			callback: () => {
-				new SampleModal(this.app).open();
+				this.toggleSession();
 			}
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
+
+		this.registerEvent(
+			this.app.workspace.on('file-open', (file) => {
+				if (this.sessionActive) {
+					if (file) {
+						this.switchToFile(file);
+					} else {
+						this.showEmptyBuffer();
 					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
 				}
-				return false;
-			}
-		});
+			})
+		);
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', () => {
+				const file = this.app.workspace.getActiveFile();
+				if (this.sessionActive && !file) {
+					this.showEmptyBuffer();
+				}
+			})
+		);
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		this.addSettingTab(new NeovimSidecarSettingTab(this.app, this));
 	}
 
+	private handleBeforeUnload = () => {
+		this.killSession();
+	};
+
 	onunload() {
+		window.removeEventListener('beforeunload', this.handleBeforeUnload);
+		this.killSession();
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<NeovimSidecarSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+	private toggleSession() {
+		if (this.sessionActive && this.isSessionRunning()) {
+			this.killSession();
+			new Notice('Neovim session closed');
+		} else {
+			const file = this.app.workspace.getActiveFile();
+			if (!file) {
+				new Notice('No file is currently open');
+				return;
+			}
+			this.startSession(file);
+		}
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	private isSessionRunning(): boolean {
+		try {
+			const tmux = this.findTmuxPath();
+			execSync(`${tmux} has-session -t ${SESSION_NAME} 2>/dev/null`, {shell: SHELL});
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	private startSession(file: TFile) {
+		const filePath = this.getAbsolutePath(file);
+		if (!filePath) {
+			new Notice('Could not determine file path');
+			return;
+		}
+
+		const nvim = this.settings.nvimPath || this.findNvimPath();
+		const tmux = this.findTmuxPath();
+		const terminal = this.settings.terminal.toLowerCase().trim();
+		const escapedPath = filePath.replace(/'/g, "'\\''");
+
+		if (this.isSessionRunning()) {
+			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, {shell: SHELL});
+		}
+
+		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${nvim} -c 'set wrap linebreak' '${escapedPath}'"`;
+		
+		exec(tmuxCmd, {shell: SHELL}, (error) => {
+			if (error) {
+				console.error('[neovim-sidecar] Failed to start tmux session:', error);
+				new Notice('Failed to start Neovim session');
+				return;
+			}
+			
+			this.currentFile = filePath;
+			this.sessionActive = true;
+			this.openTerminal(terminal);
+			new Notice('Neovim session started');
+		});
+	}
+
+	private openTerminal(terminal: string) {
+		const tmux = this.findTmuxPath();
+		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
+		const cmd = this.getTerminalCommand(terminal, attachCmd);
+
+		console.log('[neovim-sidecar] Opening terminal:', cmd);
+		exec(cmd);
+	}
+
+	private getTerminalCommand(terminal: string, attachCmd: string): string {
+		// macOS terminal commands - extend this for other platforms/terminals
+		switch (terminal) {
+			// case 'alacritty':
+			// 	return `open -na Alacritty --args -e ${SHELL} -lc "${attachCmd}"`;
+			// Future terminal support:
+			// case 'kitty':
+			//   return `open -na kitty --args ${SHELL} -lc "${attachCmd}"`;
+			// case 'wezterm':
+			//   return `open -na WezTerm --args start -- ${SHELL} -lc "${attachCmd}"`;
+			default:
+				return `open -na Alacritty --args -e ${SHELL} -lc "${attachCmd}"`;
+		}
+	}
+
+	private switchToFile(file: TFile) {
+		const filePath = this.getAbsolutePath(file);
+		if (!filePath || filePath === this.currentFile) return;
+		if (!this.isSessionRunning()) {
+			this.sessionActive = false;
+			return;
+		}
+
+		const tmux = this.findTmuxPath();
+		const escapedPath = filePath.replace(/ /g, '\\ ').replace(/'/g, "\\'");
+		
+		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":e ${escapedPath}" Enter`, {shell: SHELL}, (error) => {
+			if (error) {
+				console.error('[neovim-sidecar] Failed to switch file:', error);
+			} else {
+				this.currentFile = filePath;
+				console.log('[neovim-sidecar] Switched to:', filePath);
+			}
+		});
+	}
+
+	private showEmptyBuffer() {
+		if (!this.isSessionRunning()) return;
+		const tmux = this.findTmuxPath();
+		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":enew" Enter`, {shell: SHELL});
+		this.currentFile = null;
+	}
+
+	private killSession() {
+		if (this.isSessionRunning()) {
+			const tmux = this.findTmuxPath();
+			try {
+				execSync(`${tmux} kill-session -t ${SESSION_NAME}`, {shell: SHELL});
+			} catch (e) {
+				console.error('[neovim-sidecar] Failed to kill session:', e);
+			}
+		}
+		this.sessionActive = false;
+		this.currentFile = null;
+	}
+
+	private getAbsolutePath(file: TFile): string | null {
+		const adapter = this.app.vault.adapter;
+		if ('getBasePath' in adapter && typeof adapter.getBasePath === 'function') {
+			const basePath = adapter.getBasePath() as string;
+			return `${basePath}/${file.path}`;
+		}
+		return null;
+	}
+
+	private findNvimPath(): string {
+		const {existsSync} = require('fs');
+		const paths = [
+			'/opt/homebrew/bin/nvim',
+			'/usr/local/bin/nvim',
+			'/usr/bin/nvim',
+		];
+		for (const p of paths) {
+			if (existsSync(p)) return p;
+		}
+		return 'nvim';
+	}
+
+	private findTmuxPath(): string {
+		const {existsSync} = require('fs');
+		const paths = [
+			'/opt/homebrew/bin/tmux',
+			'/usr/local/bin/tmux',
+			'/usr/bin/tmux',
+		];
+		for (const p of paths) {
+			if (existsSync(p)) return p;
+		}
+		return 'tmux';
 	}
 }
