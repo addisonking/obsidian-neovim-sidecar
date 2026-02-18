@@ -21,3 +21,8 @@ mkdir -p .obsidian/plugins/obsidian-neovim-sidecar && gh release download -R add
 ```
 
 then enable the plugin in obsidian settings.
+
+## watch
+
+https://github.com/user-attachments/assets/6f785211-3b38-4811-b3b7-bd743446d730
+
