@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { exec, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
@@ -124,6 +124,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 			this.currentFile = filePath;
 			this.sessionActive = true;
+			this.setReadOnlyMode(true);
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 		});
@@ -135,7 +136,49 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const cmd = this.getTerminalCommand(terminal, attachCmd);
 
 		console.debug('[neovim-sidecar] Opening terminal:', cmd);
-		exec(cmd);
+		exec(cmd, () => {
+			// focus the terminal window after a short delay to ensure it's open
+			setTimeout(() => {
+				this.focusTerminal(terminal);
+			}, 300);
+		});
+	}
+
+	private focusTerminal(terminal: string) {
+		// use osascript to bring the terminal to the foreground
+		const appName = this.getAppName(terminal);
+		exec(`osascript -e 'tell application "${appName}" to activate'`);
+	}
+
+	private getAppName(terminal: string): string {
+		switch (terminal.toLowerCase()) {
+			case 'alacritty':
+				return 'Alacritty';
+			case 'kitty':
+				return 'kitty';
+			case 'wezterm':
+				return 'WezTerm';
+			case 'iterm':
+			case 'iterm2':
+				return 'iTerm';
+			default:
+				return 'Alacritty';
+		}
+	}
+
+	private setReadOnlyMode(enabled: boolean) {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (view) {
+			const state = view.getState();
+			if (enabled) {
+				// switch to reading/preview mode
+				state.mode = 'preview';
+			} else {
+				// switch back to editing mode
+				state.mode = 'source';
+			}
+			view.setState(state, { history: false });
+		}
 	}
 
 	private getTerminalCommand(terminal: string, attachCmd: string): string {
@@ -196,6 +239,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		}
 		this.sessionActive = false;
 		this.currentFile = null;
+		this.setReadOnlyMode(false);
 	}
 
 	private getAbsolutePath(file: TFile): string | null {
