@@ -25,3 +25,5 @@ then enable the plugin in obsidian settings.
 ## watch
 
 https://github.com/user-attachments/assets/6f785211-3b38-4811-b3b7-bd743446d730
+
+> works nice with https://github.com/oflisback/obsidian-bridge.nvim?tab=readme-ov-file#scroll-sync-of-buffer-scrolling
