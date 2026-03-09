@@ -74,10 +74,24 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private toggleSession() {
-		if (this.sessionActive && this.isSessionRunning()) {
+		const sessionRunning = this.isSessionRunning();
+
+		if (this.sessionActive && sessionRunning) {
+			if (!this.isClientAttached()) {
+				const terminal = this.settings.terminal.toLowerCase().trim();
+				this.openTerminal(terminal);
+				new Notice('Neovim session reattached');
+				return;
+			}
 			this.killSession();
 			new Notice('Neovim session closed');
 		} else {
+			if (sessionRunning) {
+				this.killSession();
+			}
+			if (!sessionRunning) {
+				this.sessionActive = false;
+			}
 			const file = this.app.workspace.getActiveFile();
 			if (!file) {
 				new Notice('No file is currently open');
@@ -92,6 +106,19 @@ export default class NeovimSidecarPlugin extends Plugin {
 			const tmux = this.findTmuxPath();
 			execSync(`${tmux} has-session -t ${SESSION_NAME} 2>/dev/null`, { shell: SHELL });
 			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	private isClientAttached(): boolean {
+		try {
+			const tmux = this.findTmuxPath();
+			const result = execSync(
+				`${tmux} list-clients -t ${SESSION_NAME} 2>/dev/null`,
+				{ shell: SHELL, encoding: 'utf-8' }
+			).trim();
+			return result.length > 0;
 		} catch {
 			return false;
 		}
