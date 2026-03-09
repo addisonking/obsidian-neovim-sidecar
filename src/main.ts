@@ -93,10 +93,6 @@ export default class NeovimSidecarPlugin extends Plugin {
 				this.sessionActive = false;
 			}
 			const file = this.app.workspace.getActiveFile();
-			if (!file) {
-				new Notice('No file is currently open');
-				return;
-			}
 			this.startSession(file);
 		}
 	}
@@ -114,32 +110,27 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private isClientAttached(): boolean {
 		try {
 			const tmux = this.findTmuxPath();
-			const result = execSync(
-				`${tmux} list-clients -t ${SESSION_NAME} 2>/dev/null`,
-				{ shell: SHELL, encoding: 'utf-8' }
-			).trim();
+			const result = execSync(`${tmux} list-clients -t ${SESSION_NAME} 2>/dev/null`, {
+				shell: SHELL,
+				encoding: 'utf-8',
+			}).trim();
 			return result.length > 0;
 		} catch {
 			return false;
 		}
 	}
 
-	private startSession(file: TFile) {
-		const filePath = this.getAbsolutePath(file);
-		if (!filePath) {
-			new Notice('Could not determine file path');
-			return;
-		}
+	private startSession(file: TFile | null) {
+		const filePath = file ? this.getAbsolutePath(file) : null;
 
 		const nvim = this.settings.nvimPath || this.findNvimPath();
 		const tmux = this.findTmuxPath();
 		const terminal = this.settings.terminal.toLowerCase().trim();
-		const escapedPath = filePath.replace(/'/g, "'\\''");
 
 		const vaultPath = this.getVaultPath();
 		const escapedVaultPath = vaultPath ? vaultPath.replace(/'/g, "'\\''") : '';
 
-		console.log('[neovim-sidecar] startSession:', {
+		console.debug('[neovim-sidecar] startSession:', {
 			filePath,
 			nvim,
 			tmux,
@@ -150,16 +141,21 @@ export default class NeovimSidecarPlugin extends Plugin {
 		});
 
 		if (this.isSessionRunning()) {
-			console.log('[neovim-sidecar] killing existing session');
+			console.debug('[neovim-sidecar] killing existing session');
 			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: SHELL });
 		}
 
 		const cdCmd = vaultPath ? `cd '${escapedVaultPath}' && ` : '';
-		const escapedPathDQ = escapedPath.replace(/"/g, '\\\\\\"');
-		const innerCmd = `${cdCmd}${nvim} -c \\"set wrap linebreak\\" \\"${escapedPathDQ}\\"`;
+		let fileArg = '';
+		if (filePath) {
+			const escapedPath = filePath.replace(/'/g, "'\\''");
+			const escapedPathDQ = escapedPath.replace(/"/g, '\\\\\\"');
+			fileArg = ` \\"${escapedPathDQ}\\"`;
+		}
+		const innerCmd = `${cdCmd}${nvim} -c \\"set wrap linebreak\\"${fileArg}`;
 		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${innerCmd}'"`;
 
-		console.log('[neovim-sidecar] tmux command:', tmuxCmd);
+		console.debug('[neovim-sidecar] tmux command:', tmuxCmd);
 
 		exec(tmuxCmd, { shell: SHELL }, (error, stdout, stderr) => {
 			if (error) {
@@ -169,11 +165,11 @@ export default class NeovimSidecarPlugin extends Plugin {
 				return;
 			}
 
-			if (stdout) console.log('[neovim-sidecar] tmux stdout:', stdout);
+			if (stdout) console.debug('[neovim-sidecar] tmux stdout:', stdout);
 			if (stderr) console.warn('[neovim-sidecar] tmux stderr:', stderr);
 
 			const running = this.isSessionRunning();
-			console.log('[neovim-sidecar] session created, isRunning:', running);
+			console.debug('[neovim-sidecar] session created, isRunning:', running);
 
 			if (!running) {
 				console.error('[neovim-sidecar] tmux session was created but immediately exited');
@@ -193,13 +189,13 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
 		const cmd = this.getTerminalCommand(terminal, attachCmd);
 
-		console.log('[neovim-sidecar] opening terminal:', cmd);
+		console.debug('[neovim-sidecar] opening terminal:', cmd);
 		exec(cmd, (error, stdout, stderr) => {
 			if (error) {
 				console.error('[neovim-sidecar] terminal open error:', error.message);
 				console.error('[neovim-sidecar] terminal stderr:', stderr);
 			}
-			if (stdout) console.log('[neovim-sidecar] terminal stdout:', stdout);
+			if (stdout) console.debug('[neovim-sidecar] terminal stdout:', stdout);
 			setTimeout(() => {
 				this.focusTerminal(terminal);
 			}, 300);
