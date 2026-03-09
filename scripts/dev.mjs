@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, symlinkSync, unlinkSync, rmSync } from "fs";
+import { existsSync, mkdirSync, symlinkSync, unlinkSync, rmSync, lstatSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -34,31 +34,67 @@ if (!existsSync(pluginsDir)) {
 	mkdirSync(pluginsDir, { recursive: true });
 }
 
-// remove existing symlink or directory
+// symlink individual files instead of the whole project root
+// this avoids exposing package.json ("type": "module") to obsidian,
+// which would cause it to misinterpret the cjs main.js as esm
+const pluginFiles = ["main.js", "manifest.json", "styles.css"];
+
+// remove existing plugin directory or symlink
 if (existsSync(pluginDir)) {
 	try {
-		rmSync(pluginDir, { recursive: true, force: true });
+		if (lstatSync(pluginDir).isSymbolicLink()) {
+			unlinkSync(pluginDir);
+		} else {
+			rmSync(pluginDir, { recursive: true, force: true });
+		}
 	} catch (e) {
 		console.error(`error: could not remove existing plugin directory: ${e.message}`);
 		process.exit(1);
 	}
 }
 
-// create symlink
-try {
-	symlinkSync(projectRoot, pluginDir, "dir");
-	console.log(`✓ symlinked ${projectRoot} -> ${pluginDir}`);
-} catch (e) {
-	console.error(`error: could not create symlink: ${e.message}`);
-	process.exit(1);
-}
+mkdirSync(pluginDir, { recursive: true });
 
-// cleanup on exit
+const createdLinks = [];
+for (const file of pluginFiles) {
+	const src = join(projectRoot, file);
+	const dest = join(pluginDir, file);
+	if (!existsSync(src)) {
+		if (file === "main.js") {
+			console.log(`⏳ ${file} not yet built, will be created by esbuild`);
+		}
+		continue;
+	}
+	try {
+		if (existsSync(dest)) unlinkSync(dest);
+		symlinkSync(src, dest);
+		createdLinks.push(file);
+	} catch (e) {
+		console.error(`error: could not symlink ${file}: ${e.message}`);
+		process.exit(1);
+	}
+}
+console.log(`✓ symlinked [${createdLinks.join(", ")}] into ${pluginDir}`);
+
+// ensure main.js symlink exists after first build
+const ensureMainJsLink = () => {
+	const src = join(projectRoot, "main.js");
+	const dest = join(pluginDir, "main.js");
+	if (existsSync(src) && !existsSync(dest)) {
+		try {
+			symlinkSync(src, dest);
+			console.log("✓ symlinked main.js (created by esbuild)");
+		} catch {
+			// ignore
+		}
+	}
+};
+
 const cleanup = () => {
 	try {
 		if (existsSync(pluginDir)) {
-			unlinkSync(pluginDir);
-			console.log("\n✓ removed symlink");
+			rmSync(pluginDir, { recursive: true, force: true });
+			console.log("\n✓ removed plugin directory");
 		}
 	} catch {
 		// ignore cleanup errors
@@ -76,12 +112,21 @@ process.on("SIGTERM", () => {
 
 // start esbuild watch mode
 console.log("starting esbuild in watch mode...\n");
-const esbuild = spawn("node", ["esbuild.config.mjs"], {
+const esbuildProc = spawn("node", ["esbuild.config.mjs"], {
 	cwd: projectRoot,
 	stdio: "inherit",
 });
 
-esbuild.on("close", (code) => {
+// after first build, ensure main.js symlink exists
+const linkCheck = setInterval(() => {
+	ensureMainJsLink();
+	if (existsSync(join(pluginDir, "main.js"))) {
+		clearInterval(linkCheck);
+	}
+}, 500);
+
+esbuildProc.on("close", (code) => {
+	clearInterval(linkCheck);
 	cleanup();
 	process.exit(code ?? 0);
 });
