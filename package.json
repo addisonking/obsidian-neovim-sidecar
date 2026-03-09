@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-neovim-sidecar",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"description": "a simple replacement for edit-in-neovim, tailored for alacritty and macos",
 	"main": "main.js",
 	"type": "module",
