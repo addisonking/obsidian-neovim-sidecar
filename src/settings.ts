@@ -4,11 +4,13 @@ import NeovimSidecarPlugin from './main';
 export interface NeovimSidecarSettings {
 	terminal: string;
 	nvimPath: string;
+	openOnStartup: boolean;
 }
 
 export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
 	terminal: 'alacritty',
 	nvimPath: '/opt/homebrew/bin/nvim',
+	openOnStartup: false,
 };
 
 export class NeovimSidecarSettingTab extends PluginSettingTab {
@@ -47,6 +49,16 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 						this.plugin.settings.nvimPath = value || 'nvim';
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName('Open on startup')
+			.setDesc('Open Neovim automatically on startup')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.openOnStartup).onChange(async (value) => {
+					this.plugin.settings.openOnStartup = value;
+					await this.plugin.saveSettings();
+				})
 			);
 	}
 }

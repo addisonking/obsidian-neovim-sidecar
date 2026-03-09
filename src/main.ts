@@ -50,6 +50,13 @@ export default class NeovimSidecarPlugin extends Plugin {
 		);
 
 		this.addSettingTab(new NeovimSidecarSettingTab(this.app, this));
+
+		if (this.settings.openOnStartup) {
+			this.app.workspace.onLayoutReady(() => {
+				const file = this.app.workspace.getActiveFile();
+				this.startSession(file);
+			});
+		}
 	}
 
 	private handleBeforeUnload = () => {
