@@ -109,27 +109,48 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const terminal = this.settings.terminal.toLowerCase().trim();
 		const escapedPath = filePath.replace(/'/g, "'\\''");
 
-		// Get vault directory for working directory (needed for obsidian.nvim)
 		const vaultPath = this.getVaultPath();
 		const escapedVaultPath = vaultPath ? vaultPath.replace(/'/g, "'\\''") : '';
 
+		console.log('[neovim-sidecar] startSession:', {
+			filePath,
+			nvim,
+			tmux,
+			terminal,
+			vaultPath,
+			nvimExists: existsSync(nvim),
+			tmuxExists: existsSync(tmux),
+		});
+
 		if (this.isSessionRunning()) {
+			console.log('[neovim-sidecar] killing existing session');
 			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: SHELL });
 		}
 
-		// Use interactive login shell (-li) to source shell config (.zshrc and .zprofile)
-		// and set working directory to vault
-		// This ensures plugins like obsidian.nvim, copilot.nvim, and obsidian-bridge work properly
-		// -l: login shell (sources .zprofile)
-		// -i: interactive shell (sources .zshrc where env vars like OBSIDIAN_REST_API_KEY are set)
 		const cdCmd = vaultPath ? `cd '${escapedVaultPath}' && ` : '';
-		const innerCmd = `${cdCmd}${nvim} -c "set wrap linebreak" '${escapedPath}'`;
+		const escapedPathDQ = escapedPath.replace(/"/g, '\\\\\\"');
+		const innerCmd = `${cdCmd}${nvim} -c \\"set wrap linebreak\\" \\"${escapedPathDQ}\\"`;
 		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${innerCmd}'"`;
 
-		exec(tmuxCmd, { shell: SHELL }, (error) => {
+		console.log('[neovim-sidecar] tmux command:', tmuxCmd);
+
+		exec(tmuxCmd, { shell: SHELL }, (error, stdout, stderr) => {
 			if (error) {
-				console.debug('[neovim-sidecar] Failed to start tmux session:', error);
+				console.error('[neovim-sidecar] tmux new-session failed:', error.message);
+				console.error('[neovim-sidecar] stderr:', stderr);
 				new Notice('Failed to start Neovim session');
+				return;
+			}
+
+			if (stdout) console.log('[neovim-sidecar] tmux stdout:', stdout);
+			if (stderr) console.warn('[neovim-sidecar] tmux stderr:', stderr);
+
+			const running = this.isSessionRunning();
+			console.log('[neovim-sidecar] session created, isRunning:', running);
+
+			if (!running) {
+				console.error('[neovim-sidecar] tmux session was created but immediately exited');
+				new Notice('Neovim session failed to start (exited immediately)');
 				return;
 			}
 
@@ -145,9 +166,13 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
 		const cmd = this.getTerminalCommand(terminal, attachCmd);
 
-		console.debug('[neovim-sidecar] Opening terminal:', cmd);
-		exec(cmd, () => {
-			// focus the terminal window after a short delay to ensure it's open
+		console.log('[neovim-sidecar] opening terminal:', cmd);
+		exec(cmd, (error, stdout, stderr) => {
+			if (error) {
+				console.error('[neovim-sidecar] terminal open error:', error.message);
+				console.error('[neovim-sidecar] terminal stderr:', stderr);
+			}
+			if (stdout) console.log('[neovim-sidecar] terminal stdout:', stdout);
 			setTimeout(() => {
 				this.focusTerminal(terminal);
 			}, 300);
