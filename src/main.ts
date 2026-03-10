@@ -2,6 +2,7 @@ import { Notice, Plugin, TFile } from 'obsidian';
 import { exec, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
+import { CopilotContext } from './copilot-context';
 
 const SESSION_NAME = 'obsidian-neovim-sidecar';
 const SHELL = '/bin/zsh';
@@ -10,6 +11,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 	settings: NeovimSidecarSettings;
 	private currentFile: string | null = null;
 	private sessionActive = false;
+	private copilotContext: CopilotContext | null = null;
+	private contextUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -27,6 +30,20 @@ export default class NeovimSidecarPlugin extends Plugin {
 				this.toggleSession();
 			},
 		});
+
+		this.addCommand({
+			id: 'toggle-copilot-context',
+			name: 'Toggle Copilot backlink context',
+			callback: () => {
+				this.settings.copilotContext = !this.settings.copilotContext;
+				this.saveSettings();
+				this.onCopilotContextToggled(this.settings.copilotContext);
+			},
+		});
+
+		if (this.settings.copilotContext) {
+			this.copilotContext = new CopilotContext(this.app);
+		}
 
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
@@ -65,6 +82,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 	onunload() {
 		window.removeEventListener('beforeunload', this.handleBeforeUnload);
+		this.cleanupCopilotContext();
 		this.killSession();
 	}
 
@@ -78,6 +96,83 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	onCopilotContextToggled(enabled: boolean) {
+		if (enabled) {
+			this.copilotContext = new CopilotContext(this.app);
+			const file = this.app.workspace.getActiveFile();
+			if (file && this.sessionActive) {
+				this.debouncedContextUpdate(file);
+			}
+			new Notice('Copilot backlink context enabled');
+		} else {
+			this.cleanupCopilotContext();
+			new Notice('Copilot backlink context disabled');
+		}
+	}
+
+	private debouncedContextUpdate(file: TFile) {
+		if (this.contextUpdateTimer) {
+			clearTimeout(this.contextUpdateTimer);
+		}
+		this.contextUpdateTimer = setTimeout(() => {
+			this.updateCopilotContext(file);
+			this.contextUpdateTimer = null;
+		}, 300);
+	}
+
+	private async updateCopilotContext(file: TFile) {
+		if (!this.copilotContext || !this.sessionActive) return;
+
+		try {
+			await this.copilotContext.updateContext(file);
+			this.loadContextBufferInNvim();
+			console.debug('[neovim-sidecar] Copilot context updated for:', file.basename);
+		} catch (e) {
+			console.error('[neovim-sidecar] Failed to update copilot context:', e);
+		}
+	}
+
+	private loadContextBufferInNvim() {
+		if (!this.copilotContext || !this.isSessionRunning()) return;
+
+		const contextFile = this.copilotContext.getContextFileName();
+		const tmux = this.findTmuxPath();
+
+		exec(
+			`${tmux} send-keys -t ${SESSION_NAME} Escape ":badd ${contextFile} | checktime" Enter`,
+			{ shell: SHELL },
+			(error) => {
+				if (error) {
+					console.debug('[neovim-sidecar] Failed to load context buffer:', error);
+				}
+			}
+		);
+	}
+
+	private unloadContextBufferFromNvim() {
+		if (!this.copilotContext || !this.isSessionRunning()) return;
+
+		const contextFile = this.copilotContext.getContextFileName();
+		const tmux = this.findTmuxPath();
+
+		exec(
+			`${tmux} send-keys -t ${SESSION_NAME} Escape ":silent! bdelete ${contextFile}" Enter`,
+			{ shell: SHELL }
+		);
+	}
+
+	private cleanupCopilotContext() {
+		if (this.contextUpdateTimer) {
+			clearTimeout(this.contextUpdateTimer);
+			this.contextUpdateTimer = null;
+		}
+		if (this.copilotContext) {
+			this.unloadContextBufferFromNvim();
+			this.copilotContext.cleanup();
+			this.copilotContext = null;
+		}
 	}
 
 	private toggleSession() {
@@ -188,6 +283,10 @@ export default class NeovimSidecarPlugin extends Plugin {
 			this.sessionActive = true;
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
+
+			if (this.copilotContext && file) {
+				this.debouncedContextUpdate(file);
+			}
 		});
 	}
 
@@ -269,6 +368,10 @@ export default class NeovimSidecarPlugin extends Plugin {
 				}
 			}
 		);
+
+		if (this.copilotContext) {
+			this.debouncedContextUpdate(file);
+		}
 	}
 
 	private showEmptyBuffer() {
@@ -279,6 +382,13 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private killSession() {
+		if (this.copilotContext) {
+			this.copilotContext.cleanup();
+		}
+		if (this.contextUpdateTimer) {
+			clearTimeout(this.contextUpdateTimer);
+			this.contextUpdateTimer = null;
+		}
 		if (this.isSessionRunning()) {
 			const tmux = this.findTmuxPath();
 			try {
