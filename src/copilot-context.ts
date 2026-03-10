@@ -3,6 +3,53 @@ import { writeFileSync, unlinkSync, existsSync } from 'fs';
 
 const CONTEXT_FILENAME = '.obsidian-copilot-context.md';
 
+const OBSIDIAN_BEST_PRACTICES = `# Obsidian Writing Guidelines
+
+You are assisting with writing in an Obsidian vault. Follow these conventions:
+
+## Linking
+
+- Use **wikilinks** to connect notes: \`[[Note Name]]\` or \`[[Note Name|display text]]\`
+- Link liberally — connections between notes are the core value of Obsidian
+- When mentioning a concept that has or should have its own note, link to it
+- Use \`[[Note Name#Heading]]\` to link to specific sections
+- Use \`[[Note Name^block-id]]\` to link to specific blocks
+
+## Frontmatter
+
+- Use YAML frontmatter at the top of notes for metadata:
+  \`\`\`yaml
+  ---
+  tags:
+    - topic
+  aliases:
+    - alternate name
+  date: YYYY-MM-DD
+  ---
+  \`\`\`
+- Tags can also be inline with \`#tag\` syntax
+
+## Structure
+
+- Use markdown headings (\`#\`, \`##\`, \`###\`) to organize content hierarchically
+- Keep notes atomic — one idea per note when possible
+- Use bullet lists and numbered lists for clarity
+- Use callouts for important information: \`> [!note]\`, \`> [!warning]\`, \`> [!tip]\`
+
+## Writing style
+
+- Write in plain, clear language
+- Prefer short paragraphs
+- When referencing other notes, always use wikilinks rather than plain text
+- Maintain consistency with existing note titles and tag conventions in the vault
+
+## Backlinks and context
+
+- Backlinks show which notes reference the current note
+- When writing, consider what notes already link here and maintain thematic consistency
+- Strengthen the graph by linking back to notes that reference this one when relevant
+`;
+
 export class CopilotContext {
 	private app: App;
 	private contextFilePath: string | null = null;
@@ -40,36 +87,68 @@ export class CopilotContext {
 	}
 
 	private async buildContextContent(file: TFile): Promise<string> {
-		const backlinks = this.getBacklinks(file);
-		const lines: string[] = [
-			`<!-- Copilot Context: Backlinks for "${file.basename}" -->`,
-			'<!-- This buffer provides context for AI code completion. Do not edit. -->',
-			'',
-			`# Context for ${file.basename}`,
-			'',
-		];
+		const sections: string[] = [OBSIDIAN_BEST_PRACTICES];
 
-		if (backlinks.length === 0) {
-			lines.push('No backlinks found for this note.');
-			return lines.join('\n');
-		}
+		sections.push(`---\n`);
+		sections.push(`# Current note: ${file.basename}\n`);
+		sections.push(`Path: \`${file.path}\`\n`);
 
-		lines.push('## Backlinks', '');
-
-		for (const backlink of backlinks) {
-			const excerpts = await this.getExcerpts(backlink, file);
-			lines.push(`### [[${backlink.basename}]]`, '');
-
-			if (excerpts.length > 0) {
-				for (const excerpt of excerpts) {
-					lines.push(`> ${excerpt}`, '');
-				}
-			} else {
-				lines.push(`> (linked from ${backlink.path})`, '');
+		const cache = this.app.metadataCache.getFileCache(file);
+		if (cache?.frontmatter) {
+			const tags = cache.frontmatter.tags || cache.frontmatter.tag;
+			if (tags) {
+				const tagList = Array.isArray(tags) ? tags : [tags];
+				sections.push(`Tags: ${tagList.map((t: string) => `#${t}`).join(', ')}\n`);
+			}
+			if (cache.frontmatter.aliases) {
+				const aliases = Array.isArray(cache.frontmatter.aliases)
+					? cache.frontmatter.aliases
+					: [cache.frontmatter.aliases];
+				sections.push(`Aliases: ${aliases.join(', ')}\n`);
 			}
 		}
 
-		return lines.join('\n');
+		const outgoingLinks = this.getOutgoingLinks(file, cache);
+		if (outgoingLinks.length > 0) {
+			sections.push(`\n## Outgoing links\n`);
+			sections.push(`This note links to: ${outgoingLinks.map((l) => `[[${l}]]`).join(', ')}\n`);
+		}
+
+		const backlinks = this.getBacklinks(file);
+		if (backlinks.length > 0) {
+			sections.push(`\n## Backlinks\n`);
+			sections.push(
+				`These notes link to the current note. Consider their context when writing:\n`
+			);
+
+			for (const backlink of backlinks) {
+				const excerpts = await this.getExcerpts(backlink, file);
+				sections.push(`### [[${backlink.basename}]]\n`);
+				if (excerpts.length > 0) {
+					for (const excerpt of excerpts) {
+						sections.push(`> ${excerpt}\n`);
+					}
+				} else {
+					sections.push(`> (linked from ${backlink.path})\n`);
+				}
+			}
+		} else {
+			sections.push(`\n## Backlinks\n`);
+			sections.push(`No other notes link to this note yet.\n`);
+		}
+
+		return sections.join('\n');
+	}
+
+	private getOutgoingLinks(file: TFile, cache: CachedMetadata | null): string[] {
+		if (!cache?.links) return [];
+		const seen = new Set<string>();
+		for (const link of cache.links) {
+			const resolved = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
+			const name = resolved ? resolved.basename : link.link;
+			seen.add(name);
+		}
+		return [...seen];
 	}
 
 	private getBacklinks(file: TFile): TFile[] {
