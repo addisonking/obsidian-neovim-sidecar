@@ -95,15 +95,16 @@ export class CopilotContext {
 
 		const cache = this.app.metadataCache.getFileCache(file);
 		if (cache?.frontmatter) {
-			const tags = cache.frontmatter.tags || cache.frontmatter.tag;
+			const frontmatter = cache.frontmatter as Record<string, unknown>;
+			const tags = frontmatter.tags ?? frontmatter.tag;
 			if (tags) {
 				const tagList = Array.isArray(tags) ? tags : [tags];
 				sections.push(`Tags: ${tagList.map((t: string) => `#${t}`).join(', ')}\n`);
 			}
-			if (cache.frontmatter.aliases) {
-				const aliases = Array.isArray(cache.frontmatter.aliases)
-					? cache.frontmatter.aliases
-					: [cache.frontmatter.aliases];
+			if (frontmatter.aliases) {
+				const aliases = Array.isArray(frontmatter.aliases)
+					? frontmatter.aliases
+					: [frontmatter.aliases];
 				sections.push(`Aliases: ${aliases.join(', ')}\n`);
 			}
 		}
@@ -111,7 +112,9 @@ export class CopilotContext {
 		const outgoingLinks = this.getOutgoingLinks(file, cache);
 		if (outgoingLinks.length > 0) {
 			sections.push(`\n## Outgoing links\n`);
-			sections.push(`This note links to: ${outgoingLinks.map((l) => `[[${l}]]`).join(', ')}\n`);
+			sections.push(
+				`This note links to: ${outgoingLinks.map((l) => `[[${l}]]`).join(', ')}\n`
+			);
 		}
 
 		const backlinks = this.getBacklinks(file);

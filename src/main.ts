@@ -66,10 +66,10 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-copilot-context',
-			name: 'Toggle Copilot backlink context',
-			callback: () => {
+			name: 'Toggle copilot backlink context',
+			callback: async () => {
 				this.settings.copilotContext = !this.settings.copilotContext;
-				this.saveSettings();
+				await this.saveSettings();
 				this.onCopilotContextToggled(this.settings.copilotContext);
 			},
 		});
@@ -150,7 +150,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			clearTimeout(this.contextUpdateTimer);
 		}
 		this.contextUpdateTimer = setTimeout(() => {
-			this.updateCopilotContext(file);
+			void this.updateCopilotContext(file);
 			this.contextUpdateTimer = null;
 		}, 300);
 	}

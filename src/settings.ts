@@ -66,7 +66,7 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Copilot backlink context')
 			.setDesc(
-				'Load a hidden buffer with backlink context so copilot.nvim can suggest with Obsidian graph awareness'
+				'Load a hidden buffer with backlink context so copilot.nvim can suggest with graph awareness'
 			)
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.copilotContext).onChange(async (value) => {
