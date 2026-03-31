@@ -6,6 +6,39 @@ import { CopilotContext } from './copilot-context';
 
 const SESSION_NAME = 'obsidian-neovim-sidecar';
 const SHELL = '/bin/zsh';
+const TEXT_FILE_EXTENSIONS = new Set([
+	'md',
+	'markdown',
+	'txt',
+	'json',
+	'yaml',
+	'yml',
+	'toml',
+	'ini',
+	'csv',
+	'tsv',
+	'js',
+	'ts',
+	'jsx',
+	'tsx',
+	'css',
+	'scss',
+	'html',
+	'xml',
+	'sh',
+	'bash',
+	'zsh',
+	'py',
+	'go',
+	'rs',
+	'java',
+	'c',
+	'h',
+	'cpp',
+	'hpp',
+	'sql',
+	'log',
+]);
 
 export default class NeovimSidecarPlugin extends Plugin {
 	settings: NeovimSidecarSettings;
@@ -48,7 +81,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
 				if (this.sessionActive) {
-					if (file) {
+					if (file && this.isTextFile(file)) {
 						this.switchToFile(file);
 					} else {
 						this.showEmptyBuffer();
@@ -223,7 +256,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private startSession(file: TFile | null) {
-		const filePath = file ? this.getAbsolutePath(file) : null;
+		const initialFile = file && this.isTextFile(file) ? file : null;
+		const filePath = initialFile ? this.getAbsolutePath(initialFile) : null;
 
 		const nvim = this.settings.nvimPath || this.findNvimPath();
 		const tmux = this.findTmuxPath();
@@ -284,8 +318,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 
-			if (this.copilotContext && file) {
-				this.debouncedContextUpdate(file);
+			if (this.copilotContext && initialFile) {
+				this.debouncedContextUpdate(initialFile);
 			}
 		});
 	}
@@ -346,6 +380,11 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	private switchToFile(file: TFile) {
+		if (!this.isTextFile(file)) {
+			this.showEmptyBuffer();
+			return;
+		}
+
 		const filePath = this.getAbsolutePath(file);
 		if (!filePath || filePath === this.currentFile) return;
 		if (!this.isSessionRunning()) {
@@ -408,6 +447,10 @@ export default class NeovimSidecarPlugin extends Plugin {
 			return `${basePath}/${file.path}`;
 		}
 		return null;
+	}
+
+	private isTextFile(file: TFile): boolean {
+		return TEXT_FILE_EXTENSIONS.has(file.extension.toLowerCase());
 	}
 
 	private getVaultPath(): string | null {
