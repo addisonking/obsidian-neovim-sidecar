@@ -1,16 +1,23 @@
 # obsidian-neovim-sidecar
 
-opens the current obsidian file in neovim via a tmux session in alacritty.
+opens the current obsidian file in neovim via a tmux session in your terminal emulator.
 
 ## requirements
 
 - neovim
 - tmux
-- alacritty
+- one supported terminal emulator
+
+## supported platforms and terminals
+
+- macOS: auto, Alacritty, kitty, WezTerm, iTerm2, Terminal.app
+- Linux: auto, Alacritty, kitty, WezTerm, GNOME Terminal, Konsole, Xfce Terminal, xterm
 
 ## usage
 
 click the ribbon icon or run the command "toggle neovim session" to start/stop.
+
+configure your preferred terminal in plugin settings.
 
 ## install
 

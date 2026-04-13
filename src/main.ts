@@ -3,9 +3,18 @@ import { exec, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
 import { CopilotContext } from './copilot-context';
+import {
+	buildTerminalLaunchSpec,
+	getRuntimePlatform,
+	normalizeTerminalId,
+} from './terminal-launcher';
 
 const SESSION_NAME = 'obsidian-neovim-sidecar';
-const SHELL = '/bin/zsh';
+const RUNTIME_PROCESS = (
+	globalThis as { process?: { platform?: string; env?: Record<string, string | undefined> } }
+).process;
+const PLATFORM = getRuntimePlatform();
+const SHELL_ENV = RUNTIME_PROCESS?.env?.SHELL;
 const TEXT_FILE_EXTENSIONS = new Set([
 	'md',
 	'markdown',
@@ -42,6 +51,7 @@ const TEXT_FILE_EXTENSIONS = new Set([
 
 export default class NeovimSidecarPlugin extends Plugin {
 	settings: NeovimSidecarSettings;
+	private readonly shellPath = SHELL_ENV || (PLATFORM === 'linux' ? '/bin/bash' : '/bin/zsh');
 	private currentFile: string | null = null;
 	private sessionActive = false;
 	private copilotContext: CopilotContext | null = null;
@@ -175,7 +185,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		exec(
 			`${tmux} send-keys -t ${SESSION_NAME} Escape ":badd ${contextFile} | checktime" Enter`,
-			{ shell: SHELL },
+			{ shell: this.shellPath },
 			(error) => {
 				if (error) {
 					console.debug('[neovim-sidecar] Failed to load context buffer:', error);
@@ -192,7 +202,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		exec(
 			`${tmux} send-keys -t ${SESSION_NAME} Escape ":silent! bdelete ${contextFile}" Enter`,
-			{ shell: SHELL }
+			{ shell: this.shellPath }
 		);
 	}
 
@@ -213,7 +223,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		if (this.sessionActive && sessionRunning) {
 			if (!this.isClientAttached()) {
-				const terminal = this.settings.terminal.toLowerCase().trim();
+				const terminal = normalizeTerminalId(this.settings.terminal);
 				this.openTerminal(terminal);
 				new Notice('Neovim session reattached');
 				return;
@@ -235,7 +245,9 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private isSessionRunning(): boolean {
 		try {
 			const tmux = this.findTmuxPath();
-			execSync(`${tmux} has-session -t ${SESSION_NAME} 2>/dev/null`, { shell: SHELL });
+			execSync(`${tmux} has-session -t ${SESSION_NAME} 2>/dev/null`, {
+				shell: this.shellPath,
+			});
 			return true;
 		} catch {
 			return false;
@@ -246,7 +258,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		try {
 			const tmux = this.findTmuxPath();
 			const result = execSync(`${tmux} list-clients -t ${SESSION_NAME} 2>/dev/null`, {
-				shell: SHELL,
+				shell: this.shellPath,
 				encoding: 'utf-8',
 			}).trim();
 			return result.length > 0;
@@ -259,9 +271,9 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const initialFile = file && this.isTextFile(file) ? file : null;
 		const filePath = initialFile ? this.getAbsolutePath(initialFile) : null;
 
-		const nvim = this.settings.nvimPath || this.findNvimPath();
+		const nvim = this.resolveNvimPath();
 		const tmux = this.findTmuxPath();
-		const terminal = this.settings.terminal.toLowerCase().trim();
+		const terminal = normalizeTerminalId(this.settings.terminal);
 
 		const vaultPath = this.getVaultPath();
 		const escapedVaultPath = vaultPath ? vaultPath.replace(/'/g, "'\\''") : '';
@@ -278,7 +290,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		if (this.isSessionRunning()) {
 			console.debug('[neovim-sidecar] killing existing session');
-			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: SHELL });
+			execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: this.shellPath });
 		}
 
 		const cdCmd = vaultPath ? `cd '${escapedVaultPath}' && ` : '';
@@ -289,11 +301,11 @@ export default class NeovimSidecarPlugin extends Plugin {
 			fileArg = ` \\"${escapedPathDQ}\\"`;
 		}
 		const innerCmd = `${cdCmd}${nvim} -c \\"set wrap linebreak\\"${fileArg}`;
-		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${SHELL} -li -c '${innerCmd}'"`;
+		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${this.shellPath} -li -c '${innerCmd}'"`;
 
 		console.debug('[neovim-sidecar] tmux command:', tmuxCmd);
 
-		exec(tmuxCmd, { shell: SHELL }, (error, stdout, stderr) => {
+		exec(tmuxCmd, { shell: this.shellPath }, (error, stdout, stderr) => {
 			if (error) {
 				console.error('[neovim-sidecar] tmux new-session failed:', error.message);
 				console.error('[neovim-sidecar] stderr:', stderr);
@@ -327,56 +339,37 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private openTerminal(terminal: string) {
 		const tmux = this.findTmuxPath();
 		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
-		const cmd = this.getTerminalCommand(terminal, attachCmd);
+		const launchSpec = buildTerminalLaunchSpec({
+			platform: PLATFORM,
+			terminal,
+			shellPath: this.shellPath,
+			attachCommand: attachCmd,
+		});
 
-		console.debug('[neovim-sidecar] opening terminal:', cmd);
-		exec(cmd, (error, stdout, stderr) => {
+		if (!launchSpec) {
+			new Notice('Unsupported platform or terminal. Check plugin settings.');
+			return;
+		}
+
+		console.debug('[neovim-sidecar] opening terminal:', launchSpec.command);
+		exec(launchSpec.command, { shell: this.shellPath }, (error, stdout, stderr) => {
 			if (error) {
 				console.error('[neovim-sidecar] terminal open error:', error.message);
 				console.error('[neovim-sidecar] terminal stderr:', stderr);
+				new Notice('Failed to launch terminal. Check plugin settings.');
 			}
 			if (stdout) console.debug('[neovim-sidecar] terminal stdout:', stdout);
 			setTimeout(() => {
-				this.focusTerminal(terminal);
+				this.focusTerminal(launchSpec.macAppName);
 			}, 300);
 		});
 	}
 
-	private focusTerminal(terminal: string) {
-		// use osascript to bring the terminal to the foreground
-		const appName = this.getAppName(terminal);
+	private focusTerminal(appName: string | null) {
+		if (PLATFORM !== 'darwin' || !appName) {
+			return;
+		}
 		exec(`osascript -e 'tell application "${appName}" to activate'`);
-	}
-
-	private getAppName(terminal: string): string {
-		switch (terminal.toLowerCase()) {
-			case 'alacritty':
-				return 'Alacritty';
-			case 'kitty':
-				return 'kitty';
-			case 'wezterm':
-				return 'WezTerm';
-			case 'iterm':
-			case 'iterm2':
-				return 'iTerm';
-			default:
-				return 'Alacritty';
-		}
-	}
-
-	private getTerminalCommand(terminal: string, attachCmd: string): string {
-		// macOS terminal commands - extend this for other platforms/terminals
-		switch (terminal) {
-			// case 'alacritty':
-			// 	return `open -na Alacritty --args -e ${SHELL} -lc "${attachCmd}"`;
-			// Future terminal support:
-			// case 'kitty':
-			//   return `open -na kitty --args ${SHELL} -lc "${attachCmd}"`;
-			// case 'wezterm':
-			//   return `open -na WezTerm --args start -- ${SHELL} -lc "${attachCmd}"`;
-			default:
-				return `open -na Alacritty --args -e ${SHELL} -lc "${attachCmd}"`;
-		}
 	}
 
 	private switchToFile(file: TFile) {
@@ -397,7 +390,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		exec(
 			`${tmux} send-keys -t ${SESSION_NAME} Escape ":e ${escapedPath}" Enter`,
-			{ shell: SHELL },
+			{ shell: this.shellPath },
 			(error) => {
 				if (error) {
 					console.debug('[neovim-sidecar] Failed to switch file:', error);
@@ -416,7 +409,9 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private showEmptyBuffer() {
 		if (!this.isSessionRunning()) return;
 		const tmux = this.findTmuxPath();
-		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":enew" Enter`, { shell: SHELL });
+		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":enew" Enter`, {
+			shell: this.shellPath,
+		});
 		this.currentFile = null;
 	}
 
@@ -431,7 +426,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		if (this.isSessionRunning()) {
 			const tmux = this.findTmuxPath();
 			try {
-				execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: SHELL });
+				execSync(`${tmux} kill-session -t ${SESSION_NAME}`, { shell: this.shellPath });
 			} catch (e) {
 				console.error('[neovim-sidecar] Failed to kill session:', e);
 			}
@@ -467,6 +462,17 @@ export default class NeovimSidecarPlugin extends Plugin {
 			if (existsSync(p)) return p;
 		}
 		return 'nvim';
+	}
+
+	private resolveNvimPath(): string {
+		const configured = this.settings.nvimPath?.trim();
+		if (!configured) {
+			return this.findNvimPath();
+		}
+		if (configured.includes('/')) {
+			return existsSync(configured) ? configured : this.findNvimPath();
+		}
+		return configured;
 	}
 
 	private findTmuxPath(): string {

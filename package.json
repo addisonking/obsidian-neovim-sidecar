@@ -1,7 +1,7 @@
 {
 	"name": "obsidian-neovim-sidecar",
-	"version": "1.6.1",
-	"description": "a simple replacement for edit-in-neovim, tailored for alacritty and macos",
+	"version": "1.7.0",
+	"description": "a simple replacement for edit-in-neovim with tmux sidecar support across macOS and Linux terminals",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

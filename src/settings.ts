@@ -1,5 +1,10 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import NeovimSidecarPlugin from './main';
+import {
+	getRuntimePlatform,
+	getTerminalOptionsForPlatform,
+	normalizeTerminalId,
+} from './terminal-launcher';
 
 export interface NeovimSidecarSettings {
 	terminal: string;
@@ -9,8 +14,8 @@ export interface NeovimSidecarSettings {
 }
 
 export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
-	terminal: 'alacritty',
-	nvimPath: '/opt/homebrew/bin/nvim',
+	terminal: 'auto',
+	nvimPath: 'nvim',
 	openOnStartup: false,
 	copilotContext: false,
 };
@@ -26,16 +31,22 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+		const terminalOptions = getTerminalOptionsForPlatform(getRuntimePlatform());
+		const terminalValue = normalizeTerminalId(this.plugin.settings.terminal);
 
 		new Setting(containerEl)
 			.setName('Terminal')
-			.setDesc('Only Alacritty is currently supported')
-			.addText((text) =>
-				text
-					.setPlaceholder('Alacritty')
-					.setValue(this.plugin.settings.terminal)
+			.setDesc('Choose the terminal used to attach to the tmux sidecar session')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions(
+						Object.fromEntries(
+							terminalOptions.map((option) => [option.id, option.label])
+						)
+					)
+					.setValue(terminalValue)
 					.onChange(async (value) => {
-						this.plugin.settings.terminal = value;
+						this.plugin.settings.terminal = normalizeTerminalId(value);
 						await this.plugin.saveSettings();
 					})
 			);
