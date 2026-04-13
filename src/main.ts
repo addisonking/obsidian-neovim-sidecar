@@ -48,6 +48,8 @@ const TEXT_FILE_EXTENSIONS = new Set([
 	'log',
 ]);
 
+type EditorFlavor = 'neovim' | 'vim' | 'nano' | 'generic';
+
 export default class NeovimSidecarPlugin extends Plugin {
 	settings: NeovimSidecarSettings;
 	private readonly shellPath = SHELL_ENV || (PLATFORM === 'linux' ? '/bin/bash' : '/bin/zsh');
@@ -124,16 +126,21 @@ export default class NeovimSidecarPlugin extends Plugin {
 	}
 
 	onAutosaveToggled(enabled: boolean) {
+		if (enabled && !this.supportsExCommands()) {
+			new Notice('Autosave requires Neovim or vim');
+			return;
+		}
+
 		if (!this.sessionActive || !this.isSessionRunning()) {
 			return;
 		}
 
-		this.configureAutosaveInNvim(enabled);
-		new Notice(enabled ? 'Neovim autosave enabled' : 'Neovim autosave disabled');
+		this.configureAutosaveInEditor(enabled);
+		new Notice(enabled ? 'Autosave enabled' : 'Autosave disabled');
 	}
 
-	private configureAutosaveInNvim(enabled: boolean) {
-		if (!this.isSessionRunning()) {
+	private configureAutosaveInEditor(enabled: boolean) {
+		if (!this.isSessionRunning() || !this.supportsExCommands()) {
 			return;
 		}
 
@@ -206,7 +213,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const initialFile = file && this.isTextFile(file) ? file : null;
 		const filePath = initialFile ? this.getAbsolutePath(initialFile) : null;
 
-		const nvim = this.resolveNvimPath();
+		const editor = this.resolveNvimPath();
+		const editorFlavor = this.getEditorFlavor(editor);
 		const tmux = this.findTmuxPath();
 		const terminal = normalizeTerminalId(this.settings.terminal);
 
@@ -215,11 +223,12 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		console.debug('[neovim-sidecar] startSession:', {
 			filePath,
-			nvim,
+			editor,
+			editorFlavor,
 			tmux,
 			terminal,
 			vaultPath,
-			nvimExists: existsSync(nvim),
+			editorExists: existsSync(editor),
 			tmuxExists: existsSync(tmux),
 		});
 
@@ -235,7 +244,9 @@ export default class NeovimSidecarPlugin extends Plugin {
 			const escapedPathDQ = escapedPath.replace(/"/g, '\\\\\\"');
 			fileArg = ` \\"${escapedPathDQ}\\"`;
 		}
-		const innerCmd = `${cdCmd}${nvim} -c \\"set wrap linebreak\\"${fileArg}`;
+		const editorArgs = this.buildEditorArgs(editorFlavor);
+		const keepShellAlive = `; exec ${this.shellPath} -li`;
+		const innerCmd = `${cdCmd}${editor}${editorArgs}${fileArg}${keepShellAlive}`;
 		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${this.shellPath} -li -c '${innerCmd}'"`;
 
 		console.debug('[neovim-sidecar] tmux command:', tmuxCmd);
@@ -262,7 +273,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 			this.currentFile = filePath;
 			this.sessionActive = true;
-			this.configureAutosaveInNvim(this.settings.autosave);
+			this.configureAutosaveInEditor(this.settings.autosave);
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 		});
@@ -318,6 +329,12 @@ export default class NeovimSidecarPlugin extends Plugin {
 		}
 
 		const tmux = this.findTmuxPath();
+
+		if (!this.supportsExCommands()) {
+			this.switchLineEditorFile(file, filePath);
+			return;
+		}
+
 		const escapedPath = filePath.replace(/ /g, '\\ ').replace(/'/g, "\\'");
 
 		exec(
@@ -334,8 +351,65 @@ export default class NeovimSidecarPlugin extends Plugin {
 		);
 	}
 
+	private switchLineEditorFile(file: TFile, filePath: string) {
+		const editor = this.resolveNvimPath();
+		const flavor = this.getEditorFlavor(editor);
+
+		if (flavor === 'nano') {
+			this.switchNanoFile(filePath, editor);
+			return;
+		}
+
+		this.restartSessionForLineEditor(file);
+	}
+
+	private switchNanoFile(filePath: string, editor: string) {
+		const tmux = this.findTmuxPath();
+
+		exec(
+			`${tmux} send-keys -t ${SESSION_NAME} C-o Enter C-x`,
+			{ shell: this.shellPath },
+			(error) => {
+				if (error) {
+					console.debug('[neovim-sidecar] Failed to save and exit nano:', error);
+					return;
+				}
+
+				const escapedPath = filePath.replace(/"/g, '\\"');
+				const escapedEditor = editor.replace(/"/g, '\\"');
+				const editorCommand = `${escapedEditor} "${escapedPath}"`;
+
+				setTimeout(() => {
+					exec(
+						`${tmux} send-keys -t ${SESSION_NAME} "${editorCommand}" Enter`,
+						{ shell: this.shellPath },
+						(openError) => {
+							if (openError) {
+								console.debug(
+									'[neovim-sidecar] Failed to open file in nano:',
+									openError
+								);
+								return;
+							}
+							this.currentFile = filePath;
+						}
+					);
+				}, 120);
+			}
+		);
+	}
+
+	private restartSessionForLineEditor(file: TFile) {
+		if (this.isSessionRunning()) {
+			this.killSession();
+		}
+
+		this.startSession(file);
+	}
+
 	private showEmptyBuffer() {
 		if (!this.isSessionRunning()) return;
+		if (!this.supportsExCommands()) return;
 		const tmux = this.findTmuxPath();
 		exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":enew" Enter`, {
 			shell: this.shellPath,
@@ -375,6 +449,33 @@ export default class NeovimSidecarPlugin extends Plugin {
 			return adapter.getBasePath();
 		}
 		return null;
+	}
+
+	private getEditorFlavor(editorPath: string): EditorFlavor {
+		const base = editorPath.split('/').pop()?.toLowerCase() || editorPath.toLowerCase();
+		if (base.includes('nvim')) {
+			return 'neovim';
+		}
+		if (base === 'vim' || base.endsWith('vim')) {
+			return 'vim';
+		}
+		if (base.includes('nano')) {
+			return 'nano';
+		}
+		return 'generic';
+	}
+
+	private supportsExCommands(): boolean {
+		const editor = this.resolveNvimPath();
+		const flavor = this.getEditorFlavor(editor);
+		return flavor === 'neovim' || flavor === 'vim';
+	}
+
+	private buildEditorArgs(flavor: EditorFlavor): string {
+		if (flavor === 'neovim' || flavor === 'vim') {
+			return ' -c \\"set wrap linebreak\\"';
+		}
+		return '';
 	}
 
 	private findNvimPath(): string {
