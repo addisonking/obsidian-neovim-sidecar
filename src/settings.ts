@@ -10,7 +10,6 @@ export interface NeovimSidecarSettings {
 	terminal: string;
 	nvimPath: string;
 	openOnStartup: boolean;
-	copilotContext: boolean;
 	autosave: boolean;
 }
 
@@ -18,7 +17,6 @@ export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
 	terminal: 'auto',
 	nvimPath: 'nvim',
 	openOnStartup: false,
-	copilotContext: false,
 	autosave: false,
 };
 
@@ -73,19 +71,6 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.settings.openOnStartup).onChange(async (value) => {
 					this.plugin.settings.openOnStartup = value;
 					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Copilot backlink context')
-			.setDesc(
-				'Load a hidden buffer with backlink context so copilot.nvim can suggest with graph awareness'
-			)
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.copilotContext).onChange(async (value) => {
-					this.plugin.settings.copilotContext = value;
-					await this.plugin.saveSettings();
-					this.plugin.onCopilotContextToggled(value);
 				})
 			);
 
