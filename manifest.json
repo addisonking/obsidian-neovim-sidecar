@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-neovim-sidecar",
 	"name": "Obsidian Neovim Sidecar",
-	"version": "1.8.1",
+	"version": "1.8.2",
 	"minAppVersion": "1.11.0",
 	"description": "a simple replacement for edit-in-neovim with tmux sidecar support across macOS and Linux terminals",
 	"author": "Addison King",
