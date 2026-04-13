@@ -155,6 +155,15 @@ export default class NeovimSidecarPlugin extends Plugin {
 		}
 	}
 
+	onAutosaveToggled(enabled: boolean) {
+		if (!this.sessionActive || !this.isSessionRunning()) {
+			return;
+		}
+
+		this.configureAutosaveInNvim(enabled);
+		new Notice(enabled ? 'Neovim autosave enabled' : 'Neovim autosave disabled');
+	}
+
 	private debouncedContextUpdate(file: TFile) {
 		if (this.contextUpdateTimer) {
 			clearTimeout(this.contextUpdateTimer);
@@ -175,6 +184,27 @@ export default class NeovimSidecarPlugin extends Plugin {
 		} catch (e) {
 			console.error('[neovim-sidecar] Failed to update copilot context:', e);
 		}
+	}
+
+	private configureAutosaveInNvim(enabled: boolean) {
+		if (!this.isSessionRunning()) {
+			return;
+		}
+
+		const tmux = this.findTmuxPath();
+		const command = enabled
+			? 'augroup ObsidianSidecarAutosave | autocmd! | autocmd TextChanged,TextChangedI,InsertLeave,BufLeave * silent! update | augroup END'
+			: 'augroup ObsidianSidecarAutosave | autocmd! | augroup END';
+
+		exec(
+			`${tmux} send-keys -t ${SESSION_NAME} Escape ":${command}" Enter`,
+			{ shell: this.shellPath },
+			(error) => {
+				if (error) {
+					console.debug('[neovim-sidecar] Failed to configure autosave:', error);
+				}
+			}
+		);
 	}
 
 	private loadContextBufferInNvim() {
@@ -327,6 +357,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 			this.currentFile = filePath;
 			this.sessionActive = true;
+			this.configureAutosaveInNvim(this.settings.autosave);
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 

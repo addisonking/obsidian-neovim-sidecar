@@ -11,6 +11,7 @@ export interface NeovimSidecarSettings {
 	nvimPath: string;
 	openOnStartup: boolean;
 	copilotContext: boolean;
+	autosave: boolean;
 }
 
 export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
 	nvimPath: 'nvim',
 	openOnStartup: false,
 	copilotContext: false,
+	autosave: false,
 };
 
 export class NeovimSidecarSettingTab extends PluginSettingTab {
@@ -84,6 +86,17 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 					this.plugin.settings.copilotContext = value;
 					await this.plugin.saveSettings();
 					this.plugin.onCopilotContextToggled(value);
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Autosave in Neovim')
+			.setDesc('Autosave from Neovim for real-time preview in Obsidian')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.autosave).onChange(async (value) => {
+					this.plugin.settings.autosave = value;
+					await this.plugin.saveSettings();
+					this.plugin.onAutosaveToggled(value);
 				})
 			);
 	}
