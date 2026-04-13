@@ -91,7 +91,7 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Autosave in Neovim')
-			.setDesc('Autosave from Neovim for real-time preview in Obsidian')
+			.setDesc('Save automatically for real-time preview')
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.autosave).onChange(async (value) => {
 					this.plugin.settings.autosave = value;
