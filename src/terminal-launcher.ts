@@ -30,7 +30,10 @@ export interface TerminalLaunchSpec {
 	terminal: TerminalId;
 	command: string;
 	macAppName: string | null;
+	windowTitle: string | null;
 }
+
+export const SIDECAR_WINDOW_TITLE = 'obsidian-neovim-sidecar';
 
 interface BuildTerminalLaunchSpecParams {
 	platform: RuntimePlatform;
@@ -127,6 +130,10 @@ export function buildTerminalLaunchSpec(
 		terminal,
 		command,
 		macAppName: platform === 'darwin' ? getMacAppName(terminal) : null,
+		windowTitle:
+			platform === 'darwin' && ['alacritty', 'kitty'].includes(terminal)
+				? SIDECAR_WINDOW_TITLE
+				: null,
 	};
 }
 
@@ -237,9 +244,9 @@ function buildDarwinCommand(
 
 	switch (terminal) {
 		case 'alacritty':
-			return `open -na "Alacritty" --args -e "${shell}" -lc "${attach}"`;
+			return `open -na "Alacritty" --args -T "${SIDECAR_WINDOW_TITLE}" -o window.dynamic_title=false -e "${shell}" -lc "${attach}"`;
 		case 'kitty':
-			return `open -na "kitty" --args "${shell}" -lc "${attach}"`;
+			return `open -na "kitty" --args --title "${SIDECAR_WINDOW_TITLE}" "${shell}" -lc "${attach}"`;
 		case 'wezterm':
 			return `open -na "WezTerm" --args start -- "${shell}" -lc "${attach}"`;
 		case 'iterm2': {

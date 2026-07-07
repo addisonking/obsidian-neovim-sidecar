@@ -7,6 +7,11 @@ import {
 	getRuntimePlatform,
 	normalizeTerminalId,
 } from './terminal-launcher';
+import {
+	buildTileWindowsScript,
+	getTerminalProcessName,
+	isAccessibilityError,
+} from './window-tiler';
 
 const SESSION_NAME = 'obsidian-neovim-sidecar';
 const RUNTIME_PROCESS = (
@@ -55,6 +60,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private readonly shellPath = SHELL_ENV || (PLATFORM === 'linux' ? '/bin/bash' : '/bin/zsh');
 	private currentFile: string | null = null;
 	private sessionActive = false;
+	private lastTerminalAppName: string | null = null;
+	private lastTerminalWindowTitle: string | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -294,6 +301,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 			return;
 		}
 
+		this.lastTerminalAppName = launchSpec.macAppName;
+		this.lastTerminalWindowTitle = launchSpec.windowTitle;
 		console.debug('[neovim-sidecar] opening terminal:', launchSpec.command);
 		exec(launchSpec.command, { shell: this.shellPath }, (error, stdout, stderr) => {
 			if (error) {
@@ -304,6 +313,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			if (stdout) console.debug('[neovim-sidecar] terminal stdout:', stdout);
 			setTimeout(() => {
 				this.focusTerminal(launchSpec.macAppName);
+				this.tileWindows(launchSpec.macAppName);
 			}, 300);
 		});
 	}
@@ -313,6 +323,40 @@ export default class NeovimSidecarPlugin extends Plugin {
 			return;
 		}
 		exec(`osascript -e 'tell application "${appName}" to activate'`);
+	}
+
+	onTileSettingsChanged() {
+		if (!this.sessionActive || !this.isSessionRunning() || !this.isClientAttached()) {
+			return;
+		}
+		this.tileWindows(this.lastTerminalAppName);
+	}
+
+	private tileWindows(appName: string | null) {
+		if (PLATFORM !== 'darwin' || !appName || !this.settings.tileWindows) {
+			return;
+		}
+
+		const script = buildTileWindowsScript(
+			getTerminalProcessName(appName),
+			this.settings.tileSide,
+			this.lastTerminalWindowTitle
+		);
+		const command = `osascript -e '${script.replace(/'/g, "'\\''")}'`;
+
+		console.debug('[neovim-sidecar] tiling windows:', command);
+		exec(command, (error, stdout, stderr) => {
+			if (!error) return;
+			console.error('[neovim-sidecar] tiling failed:', error.message, stderr);
+			if (isAccessibilityError(`${error.message} ${stderr}`)) {
+				new Notice(
+					'Window tiling needs accessibility permission. Grant it under privacy and security settings, then try again.',
+					10000
+				);
+			} else {
+				new Notice('Failed to tile windows. See console for details.');
+			}
+		});
 	}
 
 	private switchToFile(file: TFile) {

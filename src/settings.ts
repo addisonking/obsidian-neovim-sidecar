@@ -11,6 +11,8 @@ export interface NeovimSidecarSettings {
 	nvimPath: string;
 	openOnStartup: boolean;
 	autosave: boolean;
+	tileWindows: boolean;
+	tileSide: 'left' | 'right';
 }
 
 export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
@@ -18,6 +20,8 @@ export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
 	nvimPath: 'nvim',
 	openOnStartup: false,
 	autosave: false,
+	tileWindows: false,
+	tileSide: 'right',
 };
 
 export class NeovimSidecarSettingTab extends PluginSettingTab {
@@ -73,6 +77,38 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
+
+		if (getRuntimePlatform() === 'darwin') {
+			new Setting(containerEl)
+				.setName('Tile windows side by side')
+				.setDesc(
+					'Resize this window and the terminal to fill half the screen each (requires accessibility permission)'
+				)
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.tileWindows).onChange(async (value) => {
+						this.plugin.settings.tileWindows = value;
+						await this.plugin.saveSettings();
+						if (value) this.plugin.onTileSettingsChanged();
+						this.display();
+					})
+				);
+
+			if (this.plugin.settings.tileWindows) {
+				new Setting(containerEl)
+					.setName('Terminal side')
+					.setDesc('Which half of the screen the terminal window goes on')
+					.addDropdown((dropdown) =>
+						dropdown
+							.addOptions({ right: 'Right', left: 'Left' })
+							.setValue(this.plugin.settings.tileSide)
+							.onChange(async (value) => {
+								this.plugin.settings.tileSide = value === 'left' ? 'left' : 'right';
+								await this.plugin.saveSettings();
+								this.plugin.onTileSettingsChanged();
+							})
+					);
+			}
+		}
 
 		new Setting(containerEl)
 			.setName('Autosave in Neovim')
