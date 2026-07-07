@@ -1,5 +1,5 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
-import NeovimSidecarPlugin from './main';
+import { type App, PluginSettingTab, Setting } from 'obsidian';
+import type NeovimSidecarPlugin from './main';
 import {
 	getRuntimePlatform,
 	getTerminalOptionsForPlatform,

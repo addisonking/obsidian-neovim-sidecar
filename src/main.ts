@@ -1,7 +1,7 @@
-import { Notice, Plugin, TFile } from 'obsidian';
-import { exec, execSync } from 'child_process';
-import { existsSync } from 'fs';
-import { DEFAULT_SETTINGS, NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
+import { exec, execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { Notice, Plugin, type TFile } from 'obsidian';
+import { DEFAULT_SETTINGS, type NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
 import {
 	buildTerminalLaunchSpec,
 	getRuntimePlatform,
@@ -345,7 +345,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 		const command = `osascript -e '${script.replace(/'/g, "'\\''")}'`;
 
 		console.debug('[neovim-sidecar] tiling windows:', command);
-		exec(command, (error, stdout, stderr) => {
+		exec(command, (error, _stdout, stderr) => {
 			if (!error) return;
 			console.error('[neovim-sidecar] tiling failed:', error.message, stderr);
 			if (isAccessibilityError(`${error.message} ${stderr}`)) {

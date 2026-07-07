@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const manifestPath = new URL('./manifest.json', import.meta.url);
 const versionsPath = new URL('./versions.json', import.meta.url);
