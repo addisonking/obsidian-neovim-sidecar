@@ -19,6 +19,14 @@ click the ribbon icon or run the command "toggle neovim session" to start/stop.
 
 configure your preferred terminal in plugin settings.
 
+### cursor sync
+
+enable "sync cursor position" in plugin settings to keep obsidian and neovim on
+the same line. move in either one and the other follows.
+
+requires neovim (it uses `serverstart`), and obsidian only follows while the note
+is in source or live preview mode. sync is line-granular, not column.
+
 ## install
 
 run this in your vault directory:
@@ -33,4 +41,6 @@ then enable the plugin in obsidian settings.
 
 [Obsidian-neovim-sidecar-demo.webm](https://github.com/user-attachments/assets/e97738cd-ba99-4131-9494-b8190fa4e780)
 
-> works nice with https://github.com/oflisback/obsidian-bridge.nvim?tab=readme-ov-file#scroll-sync-of-buffer-scrolling
+> as of 1.10.0 cursor sync is built in, so you no longer need
+> [obsidian-bridge.nvim](https://github.com/oflisback/obsidian-bridge.nvim) for it.
+> that plugin also needs the local rest api plugin; this one talks to neovim directly.
