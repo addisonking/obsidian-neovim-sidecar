@@ -11,6 +11,7 @@ export interface NeovimSidecarSettings {
 	nvimPath: string;
 	openOnStartup: boolean;
 	autosave: boolean;
+	cursorSync: boolean;
 	tileWindows: boolean;
 	tileSide: 'left' | 'right';
 }
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: NeovimSidecarSettings = {
 	nvimPath: 'nvim',
 	openOnStartup: false,
 	autosave: false,
+	cursorSync: false,
 	tileWindows: false,
 	tileSide: 'right',
 };
@@ -118,6 +120,17 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 					this.plugin.settings.autosave = value;
 					await this.plugin.saveSettings();
 					this.plugin.onAutosaveToggled(value);
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Sync cursor position')
+			.setDesc('Keep the cursor on the same line in Obsidian and Neovim')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.cursorSync).onChange(async (value) => {
+					this.plugin.settings.cursorSync = value;
+					await this.plugin.saveSettings();
+					this.plugin.onCursorSyncToggled(value);
 				})
 			);
 	}

@@ -1,6 +1,7 @@
 import { exec, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { Notice, Plugin, type TFile } from 'obsidian';
+import { CursorSync } from './cursor-sync';
 import { DEFAULT_SETTINGS, type NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
 import {
 	buildTerminalLaunchSpec,
@@ -62,9 +63,21 @@ export default class NeovimSidecarPlugin extends Plugin {
 	private sessionActive = false;
 	private lastTerminalAppName: string | null = null;
 	private lastTerminalWindowTitle: string | null = null;
+	private cursorSync: CursorSync;
 
 	async onload() {
 		await this.loadSettings();
+
+		this.cursorSync = new CursorSync({
+			plugin: this,
+			getNvimPath: () => this.resolveNvimPath(),
+			getActiveFilePath: () => {
+				const file = this.app.workspace.getActiveFile();
+				return file ? this.getAbsolutePath(file) : null;
+			},
+		});
+		this.registerEditorExtension(this.cursorSync.editorExtension());
+		this.register(() => this.cursorSync.stop());
 
 		this.addRibbonIcon('file-code', 'Open in Neovim', () => {
 			this.toggleSession();
@@ -144,6 +157,53 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 		this.configureAutosaveInEditor(enabled);
 		new Notice(enabled ? 'Autosave enabled' : 'Autosave disabled');
+	}
+
+	onCursorSyncToggled(enabled: boolean) {
+		if (enabled && !this.supportsExCommands()) {
+			new Notice('Cursor sync requires Neovim');
+			return;
+		}
+
+		if (!this.sessionActive || !this.isSessionRunning()) {
+			return;
+		}
+
+		this.configureCursorSyncInEditor(enabled);
+		new Notice(enabled ? 'Cursor sync enabled' : 'Cursor sync disabled');
+	}
+
+	private configureCursorSyncInEditor(enabled: boolean) {
+		if (!this.isSessionRunning() || this.getEditorFlavor(this.resolveNvimPath()) !== 'neovim') {
+			return;
+		}
+
+		const tmux = this.findTmuxPath();
+
+		if (!enabled) {
+			this.cursorSync.stop();
+			const teardown = 'augroup ObsidianSidecarCursor | autocmd! | augroup END';
+			exec(`${tmux} send-keys -t ${SESSION_NAME} Escape ":${teardown}" Enter`, {
+				shell: this.shellPath,
+			});
+			return;
+		}
+
+		const luaPath = this.cursorSync.prepare();
+		if (!luaPath) return;
+
+		const escapedPath = luaPath.replace(/ /g, '\\ ');
+		exec(
+			`${tmux} send-keys -t ${SESSION_NAME} Escape ":luafile ${escapedPath}" Enter`,
+			{ shell: this.shellPath },
+			(error) => {
+				if (error) {
+					console.debug('[neovim-sidecar] Failed to load cursor sync:', error);
+					return;
+				}
+				this.cursorSync.start();
+			}
+		);
 	}
 
 	private configureAutosaveInEditor(enabled: boolean) {
@@ -281,6 +341,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			this.currentFile = filePath;
 			this.sessionActive = true;
 			this.configureAutosaveInEditor(this.settings.autosave);
+			this.configureCursorSyncInEditor(this.settings.cursorSync);
 			this.openTerminal(terminal);
 			new Notice('Neovim session started');
 		});
@@ -470,6 +531,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 				console.error('[neovim-sidecar] Failed to kill session:', e);
 			}
 		}
+		this.cursorSync.stop();
 		this.sessionActive = false;
 		this.currentFile = null;
 	}
