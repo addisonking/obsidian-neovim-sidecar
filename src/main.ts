@@ -8,6 +8,7 @@ import {
 	buildTerminalLaunchSpec,
 	getRuntimePlatform,
 	normalizeTerminalId,
+	SIDECAR_WINDOW_TITLE,
 } from './terminal-launcher';
 import {
 	buildTileWindowsScript,
@@ -137,6 +138,8 @@ export default class NeovimSidecarPlugin extends Plugin {
 			})
 		);
 
+		window.addEventListener('beforeunload', this.handleBeforeUnload);
+
 		if (this.settings.openOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
 				this.startSession();
@@ -144,7 +147,12 @@ export default class NeovimSidecarPlugin extends Plugin {
 		}
 	}
 
+	private handleBeforeUnload = () => {
+		this.killSession();
+	};
+
 	onunload() {
+		window.removeEventListener('beforeunload', this.handleBeforeUnload);
 		this.killSession();
 	}
 
@@ -313,8 +321,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			fileArg = ` \\"${escapedPathDQ}\\"`;
 		}
 		const editorArgs = ' -c \\"set wrap linebreak\\"';
-		const keepShellAlive = `; exec ${this.shellPath} -li`;
-		const innerCmd = `${cdCmd}${editor}${editorArgs}${luaArg}${fileArg}${keepShellAlive}`;
+		const innerCmd = `${cdCmd}${editor}${editorArgs}${luaArg}${fileArg}`;
 		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${this.shellPath} -li -c '${innerCmd}'"`;
 
 		console.debug('[neovim-sidecar] tmux command:', tmuxCmd);
@@ -351,7 +358,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 
 	private openTerminal(terminal: string) {
 		const tmux = this.findTmuxPath();
-		const attachCmd = `${tmux} attach-session -t ${SESSION_NAME}`;
+		const attachCmd = `exec ${tmux} attach-session -t ${SESSION_NAME}`;
 		const launchSpec = buildTerminalLaunchSpec({
 			platform: PLATFORM,
 			terminal,
@@ -464,9 +471,32 @@ export default class NeovimSidecarPlugin extends Plugin {
 				console.error('[neovim-sidecar] Failed to kill session:', e);
 			}
 		}
+		if (this.lastTerminalAppName) {
+			this.closeTerminalWindow(this.lastTerminalAppName);
+		}
 		this.cursorSync.stop();
 		this.sessionActive = false;
 		this.currentFile = null;
+	}
+
+	private closeTerminalWindow(appName: string) {
+		if (PLATFORM !== 'darwin' || !appName) return;
+		const script = `
+tell application "System Events"
+	if exists (application process "${appName}") then
+		tell application process "${appName}"
+			repeat with w in (every window whose name contains "${SIDECAR_WINDOW_TITLE}")
+				try
+					close w
+				end try
+			end repeat
+		end tell
+	end if
+end tell
+		`.trim();
+		try {
+			exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+		} catch {}
 	}
 
 	private getAbsolutePath(file: TFile): string | null {
