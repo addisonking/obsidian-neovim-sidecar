@@ -1,38 +1,38 @@
-# obsidian-neovim-sidecar
+# Neovim Sidecar
 
-opens the current obsidian file in neovim via a tmux session in your terminal emulator.
+Opens the current Obsidian file in Neovim via a tmux session in your terminal emulator with real-time bi-directional scroll synchronization, live line highlighting, and automatic window tiling.
 
-## requirements
+## Requirements
 
-- neovim
+- Neovim (`nvim`)
 - tmux
-- one supported terminal emulator
+- Supported terminal emulator
 
-## supported platforms and terminals
+## Supported Platforms and Terminals
 
-- macOS: auto, Alacritty, kitty, WezTerm, iTerm2, Terminal.app
-- Linux: auto, Alacritty, kitty, WezTerm, GNOME Terminal, Konsole, Xfce Terminal, xterm
+- **macOS**: Auto, Alacritty, kitty, Ghostty, WezTerm, iTerm2, Terminal.app
+- **Linux**: Auto, Alacritty, kitty, Ghostty, WezTerm
 
-## usage
+## Usage
 
-click the ribbon icon or run the command "toggle neovim session" to start/stop.
+* Click the ribbon icon or run the command `Toggle Neovim session` to start/stop.
+* Configure your preferred terminal, window tiling side, and sync options in plugin settings.
 
-configure your preferred terminal in plugin settings.
+### Cursor & Scroll Sync
 
-### cursor sync
+Enable **Sync cursor position** in plugin settings to keep Obsidian and Neovim on the same line at up to 120Hz display refresh rate. Move or scroll in either one, and the other follows with active line highlighting.
 
-enable "sync cursor position" in plugin settings to keep obsidian and neovim on
-the same line. move in either one and the other follows.
+## Installation
 
-requires neovim (it uses `serverstart`), and obsidian only follows while the note
-is in source or live preview mode. sync is line-granular, not column.
+### Via BRAT (Recommended for Beta Testing)
+1. Install the [BRAT](https://github.com/TfTHacker/obsidian-42-brat) plugin in Obsidian.
+2. Add `addisonking/obsidian-neovim-sidecar` to BRAT.
 
-## install
-
-run this in your vault directory:
+### Manual / CLI
+Run this in your vault directory:
 
 ```sh
-mkdir -p .obsidian/plugins/obsidian-neovim-sidecar && gh release download -R addisonking/obsidian-neovim-sidecar -D .obsidian/plugins/obsidian-neovim-sidecar -p '*' --clobber
+mkdir -p .obsidian/plugins/neovim-sidecar && gh release download -R addisonking/obsidian-neovim-sidecar -D .obsidian/plugins/neovim-sidecar -p '*' --clobber
 ```
 
 then enable the plugin in obsidian settings.

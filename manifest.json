@@ -1,9 +1,9 @@
 {
-	"id": "obsidian-neovim-sidecar",
-	"name": "Obsidian Neovim Sidecar",
-	"version": "1.12.1",
+	"id": "neovim-sidecar",
+	"name": "Neovim Sidecar",
+	"version": "1.13.0",
 	"minAppVersion": "1.11.0",
-	"description": "a simple replacement for edit-in-neovim with tmux sidecar support across macOS and Linux terminals",
+	"description": "Seamless zero-config Neovim tmux sidecar with bi-directional scroll sync, live line highlight, and automatic window tiling.",
 	"author": "Addison King",
 	"authorUrl": "https://addisonking.com",
 	"isDesktopOnly": true
