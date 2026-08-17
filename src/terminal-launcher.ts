@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 type SupportedPlatform = 'darwin' | 'linux';
 type RuntimePlatform = string;
+
 const RUNTIME_PROCESS = (
 	globalThis as {
 		process?: { env?: Record<string, string | undefined> };
@@ -13,13 +14,10 @@ export type TerminalId =
 	| 'auto'
 	| 'alacritty'
 	| 'kitty'
+	| 'ghostty'
 	| 'wezterm'
 	| 'iterm2'
-	| 'terminal'
-	| 'gnome-terminal'
-	| 'konsole'
-	| 'xfce4-terminal'
-	| 'xterm';
+	| 'terminal';
 
 export interface TerminalOption {
 	id: TerminalId;
@@ -46,28 +44,21 @@ const TERMINAL_ALIASES: Record<string, TerminalId> = {
 	auto: 'auto',
 	alacritty: 'alacritty',
 	kitty: 'kitty',
+	ghostty: 'ghostty',
 	wezterm: 'wezterm',
 	iterm: 'iterm2',
 	iterm2: 'iterm2',
 	terminal: 'terminal',
 	'terminal.app': 'terminal',
-	'gnome-terminal': 'gnome-terminal',
-	gnome: 'gnome-terminal',
-	konsole: 'konsole',
-	'xfce4-terminal': 'xfce4-terminal',
-	xfce: 'xfce4-terminal',
-	xterm: 'xterm',
 };
 
-const DARWIN_AUTO_ORDER: TerminalId[] = ['alacritty', 'kitty', 'wezterm', 'iterm2', 'terminal'];
-const LINUX_AUTO_ORDER: TerminalId[] = [
+const DARWIN_AUTO_ORDER: TerminalId[] = [
 	'alacritty',
 	'kitty',
+	'ghostty',
 	'wezterm',
-	'gnome-terminal',
-	'konsole',
-	'xfce4-terminal',
-	'xterm',
+	'iterm2',
+	'terminal',
 ];
 
 export function normalizeTerminalId(value: string | null | undefined): TerminalId {
@@ -87,26 +78,20 @@ export function getTerminalOptionsForPlatform(platform: RuntimePlatform): Termin
 			{ id: 'auto', label: 'Auto' },
 			{ id: 'alacritty', label: 'Alacritty' },
 			{ id: 'kitty', label: 'kitty' },
+			{ id: 'ghostty', label: 'Ghostty' },
 			{ id: 'wezterm', label: 'WezTerm' },
 			{ id: 'iterm2', label: 'iTerm2' },
 			{ id: 'terminal', label: 'Terminal.app' },
 		];
 	}
 
-	if (platform === 'linux') {
-		return [
-			{ id: 'auto', label: 'Auto' },
-			{ id: 'alacritty', label: 'Alacritty' },
-			{ id: 'kitty', label: 'kitty' },
-			{ id: 'wezterm', label: 'WezTerm' },
-			{ id: 'gnome-terminal', label: 'GNOME Terminal' },
-			{ id: 'konsole', label: 'Konsole' },
-			{ id: 'xfce4-terminal', label: 'Xfce Terminal' },
-			{ id: 'xterm', label: 'xterm' },
-		];
-	}
-
-	return [{ id: 'auto', label: 'Auto' }];
+	return [
+		{ id: 'auto', label: 'Auto' },
+		{ id: 'alacritty', label: 'Alacritty' },
+		{ id: 'kitty', label: 'kitty' },
+		{ id: 'ghostty', label: 'Ghostty' },
+		{ id: 'wezterm', label: 'WezTerm' },
+	];
 }
 
 export function buildTerminalLaunchSpec(
@@ -117,7 +102,6 @@ export function buildTerminalLaunchSpec(
 
 	const requested = normalizeTerminalId(params.terminal);
 	const terminal = requested === 'auto' ? detectAutoTerminal(platform) : requested;
-	if (!isSupportedOnPlatform(platform, terminal)) return null;
 
 	const command =
 		platform === 'darwin'
@@ -131,7 +115,7 @@ export function buildTerminalLaunchSpec(
 		command,
 		macAppName: platform === 'darwin' ? getMacAppName(terminal) : null,
 		windowTitle:
-			platform === 'darwin' && ['alacritty', 'kitty'].includes(terminal)
+			platform === 'darwin' && ['alacritty', 'kitty', 'ghostty'].includes(terminal)
 				? SIDECAR_WINDOW_TITLE
 				: null,
 	};
@@ -143,27 +127,10 @@ function toSupportedPlatform(platform: RuntimePlatform): SupportedPlatform | nul
 }
 
 function detectAutoTerminal(platform: SupportedPlatform): TerminalId {
-	const order = platform === 'darwin' ? DARWIN_AUTO_ORDER : LINUX_AUTO_ORDER;
-	for (const terminal of order) {
+	for (const terminal of DARWIN_AUTO_ORDER) {
 		if (isTerminalAvailable(platform, terminal)) return terminal;
 	}
-	return platform === 'darwin' ? 'terminal' : 'xterm';
-}
-
-function isSupportedOnPlatform(platform: SupportedPlatform, terminal: TerminalId): boolean {
-	if (platform === 'darwin') {
-		return ['auto', 'alacritty', 'kitty', 'wezterm', 'iterm2', 'terminal'].includes(terminal);
-	}
-	return [
-		'auto',
-		'alacritty',
-		'kitty',
-		'wezterm',
-		'gnome-terminal',
-		'konsole',
-		'xfce4-terminal',
-		'xterm',
-	].includes(terminal);
+	return 'terminal';
 }
 
 function isTerminalAvailable(platform: SupportedPlatform, terminal: TerminalId): boolean {
@@ -173,6 +140,8 @@ function isTerminalAvailable(platform: SupportedPlatform, terminal: TerminalId):
 				return hasMacApp('Alacritty') || isBinaryAvailable('alacritty');
 			case 'kitty':
 				return hasMacApp('kitty') || isBinaryAvailable('kitty');
+			case 'ghostty':
+				return hasMacApp('Ghostty') || isBinaryAvailable('ghostty');
 			case 'wezterm':
 				return hasMacApp('WezTerm') || isBinaryAvailable('wezterm');
 			case 'iterm2':
@@ -184,24 +153,7 @@ function isTerminalAvailable(platform: SupportedPlatform, terminal: TerminalId):
 		}
 	}
 
-	switch (terminal) {
-		case 'alacritty':
-			return isBinaryAvailable('alacritty');
-		case 'kitty':
-			return isBinaryAvailable('kitty');
-		case 'wezterm':
-			return isBinaryAvailable('wezterm');
-		case 'gnome-terminal':
-			return isBinaryAvailable('gnome-terminal');
-		case 'konsole':
-			return isBinaryAvailable('konsole');
-		case 'xfce4-terminal':
-			return isBinaryAvailable('xfce4-terminal');
-		case 'xterm':
-			return isBinaryAvailable('xterm');
-		default:
-			return false;
-	}
+	return isBinaryAvailable(terminal);
 }
 
 function isBinaryAvailable(binaryName: string): boolean {
@@ -247,6 +199,8 @@ function buildDarwinCommand(
 			return `open -na "Alacritty" --args -T "${SIDECAR_WINDOW_TITLE}" -o window.dynamic_title=false -e "${shell}" -lc "${attach}"`;
 		case 'kitty':
 			return `open -na "kitty" --args --title "${SIDECAR_WINDOW_TITLE}" "${shell}" -lc "${attach}"`;
+		case 'ghostty':
+			return `open -na "Ghostty" --args --title="${SIDECAR_WINDOW_TITLE}" -e "${shell} -lc '${attach}'"`;
 		case 'wezterm':
 			return `open -na "WezTerm" --args start -- "${shell}" -lc "${attach}"`;
 		case 'iterm2': {
@@ -275,16 +229,10 @@ function buildLinuxCommand(
 			return `alacritty -e "${shell}" -lc "${attach}"`;
 		case 'kitty':
 			return `kitty "${shell}" -lc "${attach}"`;
+		case 'ghostty':
+			return `ghostty -e "${shell}" -lc "${attach}"`;
 		case 'wezterm':
 			return `wezterm start -- "${shell}" -lc "${attach}"`;
-		case 'gnome-terminal':
-			return `gnome-terminal -- "${shell}" -lc "${attach}"`;
-		case 'konsole':
-			return `konsole -e "${shell}" -lc "${attach}"`;
-		case 'xfce4-terminal':
-			return `xfce4-terminal --command='${shell} -lc "${attach}"'`;
-		case 'xterm':
-			return `xterm -e "${shell}" -lc "${attach}"`;
 		default:
 			return null;
 	}
@@ -296,6 +244,8 @@ function getMacAppName(terminal: TerminalId): string | null {
 			return 'Alacritty';
 		case 'kitty':
 			return 'kitty';
+		case 'ghostty':
+			return 'Ghostty';
 		case 'wezterm':
 			return 'WezTerm';
 		case 'iterm2':

@@ -59,7 +59,7 @@ export class NeovimSidecarSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Neovim path')
-			.setDesc('Path to editor executable (nvim recommended, vim and nano supported)')
+			.setDesc('Path to Neovim executable (default: nvim)')
 			.addText((text) =>
 				text
 					.setPlaceholder('/usr/local/bin/nvim')

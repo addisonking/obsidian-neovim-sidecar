@@ -11,7 +11,7 @@ export function getTerminalProcessName(macAppName: string): string {
 export function buildTileWindowsScript(
 	terminalProcessName: string,
 	terminalSide: TileSide,
-	windowTitle: string | null
+	windowTitle: string | null = null
 ): string {
 	const proc = terminalProcessName;
 	const termX = terminalSide === 'right' ? 'x0 + halfW' : 'x0';

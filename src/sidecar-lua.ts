@@ -125,6 +125,24 @@ end
 _G.ObsidianSidecarSetAutosave(${autosave ? 'true' : 'false'})
 _G.ObsidianSidecarSetCursorSync(${cursorSync ? 'true' : 'false'})
 
+local function jump_to_heading(heading)
+  if not heading or heading == '' then
+    return false
+  end
+  heading = heading:gsub('^#+%s*', '')
+  local escaped = vim.pesc(heading)
+  local count = vim.api.nvim_buf_line_count(0)
+  for i = 1, count do
+    local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1] or ''
+    if line:find('^#+%s+' .. escaped .. '%s*$') or line:find('^#+%s+' .. escaped) then
+      pcall(vim.api.nvim_win_set_cursor, 0, { i, 0 })
+      pcall(vim.cmd, 'normal! zz')
+      return true
+    end
+  end
+  return false
+end
+
 local function resolve_wikilink()
   local line = vim.api.nvim_get_current_line()
   local col = vim.api.nvim_win_get_cursor(0)[2] + 1
@@ -134,9 +152,17 @@ local function resolve_wikilink()
     local s, e, match = line:find(pattern, start_pos)
     if not s then break end
     if col >= s and col <= e then
-      local target = match:match('^([^#|]+)')
-      if target and target ~= '' then
-        target = target:gsub('^%s*(.-)%s*$', '%1')
+      local link_content = match:match('^([^|]+)') or match
+      local target, heading = link_content:match('^([^#]*)#?(.*)$')
+      target = target and vim.trim(target) or ''
+      heading = heading and vim.trim(heading) or ''
+
+      if target == '' and heading ~= '' then
+        jump_to_heading(heading)
+        return true
+      end
+
+      if target ~= '' then
         local candidates = {
           vault_root .. '/' .. target,
           vault_root .. '/' .. target .. '.md',
@@ -144,19 +170,36 @@ local function resolve_wikilink()
         local cur_dir = vim.fn.expand('%:p:h')
         table.insert(candidates, cur_dir .. '/' .. target)
         table.insert(candidates, cur_dir .. '/' .. target .. '.md')
+
+        local opened = false
         for _, path in ipairs(candidates) do
           if vim.fn.filereadable(path) == 1 then
             vim.cmd('edit ' .. vim.fn.fnameescape(path))
-            return true
+            opened = true
+            break
           end
         end
-        if vault_root ~= '' then
+
+        if not opened and vault_root ~= '' then
           local matches = vim.fn.globpath(vault_root, '**/' .. target .. '.md', 0, 1)
           if #matches > 0 and vim.fn.filereadable(matches[1]) == 1 then
             vim.cmd('edit ' .. vim.fn.fnameescape(matches[1]))
-            return true
+            opened = true
           end
         end
+
+        if not opened then
+          local new_path = (vault_root ~= '' and (vault_root .. '/' .. target .. '.md')) or (cur_dir .. '/' .. target .. '.md')
+          vim.cmd('edit ' .. vim.fn.fnameescape(new_path))
+          opened = true
+        end
+
+        if opened and heading ~= '' then
+          vim.schedule(function()
+            jump_to_heading(heading)
+          end)
+        end
+        return true
       end
       break
     end
