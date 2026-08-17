@@ -24,11 +24,6 @@ Enable **Sync cursor position** in plugin settings to keep Obsidian and Neovim o
 
 ## Installation
 
-### Via BRAT (Recommended for Beta Testing)
-1. Install the [BRAT](https://github.com/TfTHacker/obsidian-42-brat) plugin in Obsidian.
-2. Add `addisonking/obsidian-neovim-sidecar` to BRAT.
-
-### Manual / CLI
 Run this in your vault directory:
 
 ```sh
