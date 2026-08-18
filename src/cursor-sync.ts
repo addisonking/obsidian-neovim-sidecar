@@ -70,26 +70,27 @@ export class CursorSync {
 	handleObsidianScroll(view: EditorView) {
 		if (!this.running) return;
 		try {
-			const midY = view.scrollDOM.scrollTop + view.scrollDOM.clientHeight / 2;
-			const block = view.lineBlockAtHeight(midY);
-			const line = view.state.doc.lineAt(block.from).number;
+			const scrollDOM = view.scrollDOM;
+			const rect = scrollDOM.getBoundingClientRect();
+			const midY = rect.top + scrollDOM.clientHeight / 2;
+			const pos = view.posAtCoords({ x: rect.left + 40, y: midY }) ?? view.viewport.from;
+			const line = view.state.doc.lineAt(pos).number;
 			this.onObsidianCursorMoved(line);
 		} catch {
-			const line = view.state.doc.lineAt(view.viewport.from).number;
-			this.onObsidianCursorMoved(line);
+			try {
+				const line = view.state.doc.lineAt(view.viewport.from).number;
+				this.onObsidianCursorMoved(line);
+			} catch {}
 		}
 	}
 
 	private onWindowScroll = (event: Event) => {
 		if (!this.running) return;
 		const target = event.target as HTMLElement | null;
-		if (
-			!target ||
-			typeof target.className !== 'string' ||
-			!target.className.includes('cm-scroller')
-		) {
-			return;
-		}
+		const scroller =
+			target?.closest?.('.cm-scroller') ??
+			(target?.classList?.contains('cm-scroller') ? target : null);
+		if (!scroller) return;
 		const view = this.deps.plugin.app.workspace.getActiveViewOfType(MarkdownView);
 		if (view?.getMode() !== 'source') return;
 		const cm = (view.editor as unknown as { cm?: EditorView }).cm;

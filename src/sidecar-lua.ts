@@ -54,11 +54,20 @@ local function push()
   pcall(vim.fn.writefile, { path, tostring(line) }, cursor_file)
 end
 
+local function normalize_path(p)
+  if not p or p == '' then
+    return ''
+  end
+  return vim.fs.normalize(vim.fn.fnamemodify(p, ':p'))
+end
+
 function _G.ObsidianSidecarOpenFile(path)
   if not path or path == '' then
     return 0
   end
-  if vim.api.nvim_buf_get_name(0) == path then
+  local cur_path = normalize_path(vim.api.nvim_buf_get_name(0))
+  local target_path = normalize_path(path)
+  if cur_path == target_path then
     return 1
   end
   suppress_until = uv.now() + ${SUPPRESS_MS}
@@ -78,8 +87,12 @@ function _G.ObsidianSidecarShowEmptyBuffer()
 end
 
 function _G.ObsidianSidecarSetCursor(line, path)
-  if path ~= nil and path ~= '' and vim.api.nvim_buf_get_name(0) ~= path then
-    return 0
+  if path ~= nil and path ~= '' then
+    local cur_path = normalize_path(vim.api.nvim_buf_get_name(0))
+    local target_path = normalize_path(path)
+    if cur_path ~= target_path and vim.api.nvim_buf_get_name(0) ~= path then
+      return 0
+    end
   end
   local last = vim.api.nvim_buf_line_count(0)
   line = math.max(1, math.min(line, last))
