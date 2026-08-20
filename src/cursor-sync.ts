@@ -1,5 +1,13 @@
 import { execFile } from 'node:child_process';
-import { type FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	type FSWatcher,
+	mkdirSync,
+	readFileSync,
+	unlinkSync,
+	watch,
+	writeFileSync,
+} from 'node:fs';
 import { type Extension, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView } from '@codemirror/view';
 import { MarkdownView, type Plugin, TFile } from 'obsidian';
@@ -103,6 +111,11 @@ export class CursorSync {
 	prepare(cursorSync = false, autosave = false): string | null {
 		try {
 			mkdirSync(CURSOR_SYNC_PATHS.dir, { recursive: true });
+			try {
+				if (existsSync(CURSOR_SYNC_PATHS.socket)) {
+					unlinkSync(CURSOR_SYNC_PATHS.socket);
+				}
+			} catch {}
 			const vaultPath = this.deps.getVaultPath() ?? '';
 			writeFileSync(
 				CURSOR_SYNC_PATHS.lua,

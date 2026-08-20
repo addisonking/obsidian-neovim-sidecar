@@ -1,7 +1,7 @@
 {
 	"id": "neovim-sidecar",
 	"name": "Neovim Sidecar",
-	"version": "1.13.1",
+	"version": "1.13.2",
 	"minAppVersion": "1.11.0",
 	"description": "Seamless zero-config Neovim tmux sidecar with bi-directional scroll sync, live line highlight, and automatic window tiling.",
 	"author": "Addison King",

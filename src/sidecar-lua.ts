@@ -86,6 +86,52 @@ function _G.ObsidianSidecarShowEmptyBuffer()
   return 1
 end
 
+function _G.ObsidianSidecarCloseFile(path)
+  if not path or path == '' then
+    return 0
+  end
+  local target_path = normalize_path(path)
+  suppress_until = uv.now() + ${SUPPRESS_MS}
+  vim.schedule(function()
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        local buf_path = normalize_path(vim.api.nvim_buf_get_name(buf))
+        if buf_path == target_path then
+          pcall(vim.api.nvim_set_option_value, 'buftype', 'nofile', { buf = buf })
+          pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = buf })
+          pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+      end
+    end
+    local cur_buf = vim.api.nvim_get_current_buf()
+    if not vim.api.nvim_buf_is_valid(cur_buf) or vim.api.nvim_buf_get_name(cur_buf) == '' then
+      pcall(vim.cmd, 'enew')
+    end
+  end)
+  return 1
+end
+
+function _G.ObsidianSidecarRenameFile(old_path, new_path)
+  if not old_path or not new_path or old_path == '' or new_path == '' then
+    return 0
+  end
+  local target_old = normalize_path(old_path)
+  local target_new = normalize_path(new_path)
+  suppress_until = uv.now() + ${SUPPRESS_MS}
+  vim.schedule(function()
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        local buf_path = normalize_path(vim.api.nvim_buf_get_name(buf))
+        if buf_path == target_old then
+          pcall(vim.api.nvim_buf_set_name, buf, new_path)
+          pcall(vim.cmd, 'checktime ' .. buf)
+        end
+      end
+    end
+  end)
+  return 1
+end
+
 function _G.ObsidianSidecarSetCursor(line, path)
   if path ~= nil and path ~= '' then
     local cur_path = normalize_path(vim.api.nvim_buf_get_name(0))

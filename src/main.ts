@@ -1,6 +1,6 @@
 import { exec, execFile, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { Notice, Plugin, type TFile } from 'obsidian';
+import { Notice, Plugin, TFile } from 'obsidian';
 import { CursorSync } from './cursor-sync';
 import { DEFAULT_SETTINGS, type NeovimSidecarSettings, NeovimSidecarSettingTab } from './settings';
 import { CURSOR_SYNC_PATHS } from './sidecar-lua';
@@ -134,6 +134,22 @@ export default class NeovimSidecarPlugin extends Plugin {
 					} else {
 						this.showEmptyBuffer();
 					}
+				}
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on('delete', (file) => {
+				if (this.isSessionRunning() && file instanceof TFile) {
+					this.handleFileDeleted(file);
+				}
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (this.isSessionRunning() && file instanceof TFile) {
+					this.handleFileRenamed(file, oldPath);
 				}
 			})
 		);
@@ -320,7 +336,7 @@ export default class NeovimSidecarPlugin extends Plugin {
 			const escapedPathDQ = escapedPath.replace(/"/g, '\\\\\\"');
 			fileArg = ` \\"${escapedPathDQ}\\"`;
 		}
-		const editorArgs = ' -c \\"set wrap linebreak\\"';
+		const editorArgs = ` --listen \\"${CURSOR_SYNC_PATHS.socket}\\" -c \\"set wrap linebreak\\"`;
 		const innerCmd = `${cdCmd}${editor}${editorArgs}${luaArg}${fileArg}`;
 		const tmuxCmd = `${tmux} new-session -d -s ${SESSION_NAME} "${this.shellPath} -li -c '${innerCmd}'"`;
 
@@ -460,6 +476,33 @@ export default class NeovimSidecarPlugin extends Plugin {
 				this.currentFile = null;
 			}
 		});
+	}
+
+	private handleFileDeleted(file: TFile) {
+		const filePath = this.getAbsolutePath(file);
+		if (!filePath) return;
+
+		if (this.currentFile === filePath) {
+			this.currentFile = null;
+		}
+
+		const expr = `v:lua.ObsidianSidecarCloseFile('${filePath.replace(/'/g, "''")}')`;
+		this.sendNvimRpcExpr(expr);
+	}
+
+	private handleFileRenamed(file: TFile, oldPath: string) {
+		const newPath = this.getAbsolutePath(file);
+		const adapter = this.app.vault.adapter as { getBasePath?: () => string };
+		const basePath = adapter.getBasePath ? adapter.getBasePath() : null;
+		const oldFullPath = basePath ? `${basePath}/${oldPath}` : null;
+		if (!newPath || !oldFullPath) return;
+
+		if (this.currentFile === oldFullPath) {
+			this.currentFile = newPath;
+		}
+
+		const expr = `v:lua.ObsidianSidecarRenameFile('${oldFullPath.replace(/'/g, "''")}', '${newPath.replace(/'/g, "''")}')`;
+		this.sendNvimRpcExpr(expr);
 	}
 
 	private killSession() {
